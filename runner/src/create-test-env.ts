@@ -142,12 +142,14 @@ export async function createTestEnv({
   const TestEnvironment: typeof JestEnvironment =
     await transformer.requireAndTranspileModule(testEnvironment);
 
-  let testFrameworkFactory: TestFrameworkFactory =
-    await transformer.requireAndTranspileModule(
-      process.env.JEST_JASMINE === '1'
-        ? require.resolve('jest-jasmine2')
-        : projectConfig.testRunner,
-    );
+  // let testFrameworkFactory: TestFrameworkFactory =
+  //   await transformer.requireAndTranspileModule(
+  //     process.env.JEST_JASMINE === '1'
+  //       ? require.resolve('jest-jasmine2')
+  //       : projectConfig.testRunner,
+  //   );
+
+  const testFrameworkFactory = (interopRequireDefault(require('./jasmine2')) as typeof import('./jasmine2')).default
 
   const Runtime: typeof RuntimeClass = interopRequireDefault(
     projectConfig.runtime

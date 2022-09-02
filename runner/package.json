@@ -12,10 +12,12 @@
   "gypfile": true,
   "files": [
     "dist",
-    "package.json"
+    "package.json",
+    "binding.gyp",
+    "addon"
   ],
   "scripts": {
-    "install": "node-gyp rebuild",
+    "postinstall": "node-gyp rebuild",
     "build": "rm -rf dist && tsc",
     "watch": "rm -rf dist && tsc --watch"
   },
@@ -29,6 +31,7 @@
   "dependencies": {
     "@jest/console": "^29.0.0",
     "@jest/environment": "^29.0.0",
+    "node-gyp":"^9.1.0",
     "@jest/test-result": "^29.0.0",
     "@jest/transform": "^29.0.0",
     "@jest/types": "^29.0.0",
@@ -44,12 +47,13 @@
     "jest-resolve": "^29.0.0",
     "jest-runtime": "^29.0.0",
     "jest-util": "^29.0.0",
+    "jest-config": "^29.0.0",
     "jest-watcher": "^29.0.0",
     "co": "^4.6.0",
     "is-generator-fn": "^2.0.0",
     "jest-worker": "^29.0.0",
     "p-limit": "^3.1.0",
-    "node-addon-api": "^1.1.0",
+    "node-addon-api": "^5.0.0",
     "source-map-support": "0.5.13"
   },
   "devDependencies": {

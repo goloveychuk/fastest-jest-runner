@@ -16,4 +16,4 @@ export type SnapshotBuilder<T extends string> = {
 };
 
 
-export type SnapshotBuilderModule = {default: SnapshotBuilder<string>};
+export type SnapshotBuilderModule =  SnapshotBuilder<string>

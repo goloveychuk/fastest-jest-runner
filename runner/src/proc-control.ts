@@ -57,7 +57,7 @@ class ProcControl {
     return [...this.procMapping.entries()];
   }
   private process(payload: Payload) {
-    console.log(payload);
+    // console.log(payload);
     switch (payload[0]) {
       case ProcMsgTypes.created: {
         const pid = payload[1];

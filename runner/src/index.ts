@@ -19,12 +19,15 @@ import {
   WorkerResponse,
   makeErrorResp,
   SnapshotConfig,
+  FastestJestRunnerConfig,
 } from './types';
 
 import {FifoMaker} from './fifo-maker';
 import {OnProcExit, ProcControl} from './proc-control';
 import {createAsyncFifoWriter} from './protocol';
 import type {SnapshotBuilderModule} from './snapshot';
+import {replaceRootDirInPath} from 'jest-config'
+import { createScriptTransformer } from '@jest/transform';
 
 
 
@@ -107,14 +110,21 @@ class TestRunner extends EmittingTestRunner {
     const config = tests[0].context.config;
     const serializableModuleMap = tests[0].context.moduleMap.toJSON();
 
+
+    const _snapshotPath = (config.globals['fastest-jest-runner'] as FastestJestRunnerConfig).snapshotBuilderPath;
+    const snapshotPath = replaceRootDirInPath(config.rootDir, _snapshotPath);
+
+    const cacheFS = new Map<string, string>();
+    const transformer = await createScriptTransformer(config, cacheFS);
+
+
     const snapshotConfig: SnapshotConfig = {
-      snapshotBuilderPath: require.resolve('./snapshot'),
+      snapshotBuilderPath: snapshotPath,
     };
 
-    const snapshotBuilder =
-      require(snapshotConfig.snapshotBuilderPath) as SnapshotBuilderModule;
+    const snapshotBuilder = await transformer.requireAndTranspileModule<SnapshotBuilderModule>(snapshotConfig.snapshotBuilderPath);
 
-    const nodePath = '/home/badim/github/node/out/Release/node';
+    // const nodePath = '/home/badim/github/node/out/Release/node';
     // const snapshotConfig = await collectDeps(tests, config);
 
     const createSnapshotInput: CreateSnapshotInput = {
@@ -252,7 +262,7 @@ class TestRunner extends EmittingTestRunner {
     const runTest = async (test: Test): Promise<TestResult> => {
       testsLeft.add(test.path);
       // return new Promise<TestResult>((resolve, reject) => {
-      const snapshotName = await snapshotBuilder.default.getSnapshot({
+      const snapshotName = await snapshotBuilder.getSnapshot({
         testPath: test.path,
       });
 

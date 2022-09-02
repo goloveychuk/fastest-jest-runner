@@ -42,7 +42,7 @@ export type TestFrameworkFactory = (
   config: Config.ProjectConfig,
   environment: JestEnvironment,
   runtime: RuntimeType,
-  // testPath: string,
+  testPath?: string,
   // sendMessageToJest?: TestFileEvent,
 ) => TestFramework;
 
@@ -119,6 +119,10 @@ export abstract class CallbackTestRunner
   ): Promise<void>;
 }
 
+
+export interface FastestJestRunnerConfig  {
+  snapshotBuilderPath: string
+}
 export abstract class EmittingTestRunner
   extends BaseTestRunner
   implements EmittingTestRunnerInterface

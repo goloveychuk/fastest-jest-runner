@@ -202,8 +202,10 @@ function handleChild(payload: WorkerInput.RunTest) {
 //   });
 // }
 
-const snapshotBuilderMod = require(snapshotInput.snapshotConfig
-  .snapshotBuilderPath) as SnapshotBuilderModule;
+// const snapshotBuilderMod = require(snapshotInput.snapshotConfig
+//   .snapshotBuilderPath) as SnapshotBuilderModule;
+
+
 
 async function spinSnapshot(testEnv: TestEnv, payload: WorkerInput.SpinSnapshot) {
   const req = (mod: string) => {
@@ -214,12 +216,15 @@ async function spinSnapshot(testEnv: TestEnv, payload: WorkerInput.SpinSnapshot)
     console.log('requiring', resolved);
     return testEnv.runtime.requireModule(resolved);
   };
+  //todo move to worker
+  //todo mb run snapshotBuilderPath in test context
+  const snapshotBuilder = await testEnv.transformer.requireAndTranspileModule<SnapshotBuilderModule>(snapshotInput.snapshotConfig.snapshotBuilderPath);
 
-  const build = snapshotBuilderMod.default.snapshots[payload.name];
+  const build = snapshotBuilder.snapshots[payload.name];
   if (!build) {
     throw new Error('No snapshot with name: ' + payload.name);
   }
-  await build({require: req, global: testEnv.environment.global}); //todo mb run snapshotBuilderPath in test context
+  await build({require: req, global: testEnv.environment.global});
   await runGc();
 
   if (loop(testEnv, payload.snapFifo) === 'main') {
@@ -246,7 +251,10 @@ function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
         const childPid = addon.fork(payload.snapFifo.id);
         const isChild = childPid === 0;
         if (isChild) {
-          spinSnapshot(testEnv, payload); //todo catch
+          spinSnapshot(testEnv, payload).catch(err => {
+            console.error('err in spinSnapshot', err);
+            //todo handle properly
+          }); 
           return 'child';
         } else {
           continue;
