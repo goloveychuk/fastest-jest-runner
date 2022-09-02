@@ -492,6 +492,11 @@
   dependencies:
     "@babel/types" "^7.3.0"
 
+"@types/co@^4.6.2":
+  version "4.6.3"
+  resolved "https://registry.yarnpkg.com/@types/co/-/co-4.6.3.tgz#a9b9e1976671aa701d1b2743b23de8f0ada61697"
+  integrity sha512-TSxkviYnYwXOJU5tWK1AheIKcyTbkfy4DAvOWYyjod2R6VS3S4rwS4NbQPlf//gLyqccMAZPWLVf7MkHntX1YQ==
+
 "@types/exit@^0.1.30":
   version "0.1.31"
   resolved "https://registry.yarnpkg.com/@types/exit/-/exit-0.1.31.tgz#681387d7724b42b91c29c7822da7967e05db5255"
@@ -529,6 +534,11 @@
   version "18.7.14"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-18.7.14.tgz#0fe081752a3333392d00586d815485a17c2cf3c9"
   integrity sha512-6bbDaETVi8oyIARulOE9qF1/Qdi/23z6emrUh0fNJRUmjznqrixD4MpGDdgOFk5Xb0m2H6Xu42JGdvAxaJR/wA==
+
+"@types/node@14.14.45":
+  version "14.14.45"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-14.14.45.tgz#ec2dfb5566ff814d061aef7e141575aedba245cf"
+  integrity sha512-DssMqTV9UnnoxDWu959sDLZzfvqCF0qDNRjaWeYSui9xkFe61kKo4l1TWNTQONpuXEm+gLMRvdlzvNHBamzmEw==
 
 "@types/prettier@^2.1.5":
   version "2.7.0"

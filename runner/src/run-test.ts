@@ -97,6 +97,7 @@ export function createRunTest({testFramework, runtime, globalConfig, projectConf
       // }
 
       if (globalConfig.logHeapUsage) {
+        //@ts-expect-error
         globalThis.gc?.();
 
         result.memoryUsage = process.memoryUsage().heapUsed;
