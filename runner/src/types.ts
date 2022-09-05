@@ -122,6 +122,7 @@ export abstract class CallbackTestRunner
 
 export interface FastestJestRunnerConfig  {
   snapshotBuilderPath: string
+  maxOldSpace: number
 }
 export abstract class EmittingTestRunner
   extends BaseTestRunner

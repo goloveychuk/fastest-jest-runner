@@ -42,6 +42,7 @@ Value fork_fn(const CallbackInfo &info)
 
   if (pid == 0)
   { // im children
+    // setsid(); 30 s faster??
     uv_loop_t *loop;
     if (napi_get_uv_event_loop(info.Env(), &loop))
     {

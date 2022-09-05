@@ -7,6 +7,7 @@ import {createSyncFifoReader} from './protocol';
 import * as addon from './addon';
 import type {SnapshotBuilderModule} from './snapshot';
 import type { Fifo, FifoMaker } from './fifo-maker';
+
 // console.log(process.argv[2]);
 // fs.readFileSync(process.argv[2], 'utf8')
 
@@ -129,9 +130,8 @@ function handleChild(payload: WorkerInput.RunTest) {
       Boolean((data.data as any).numPassingTests !== undefined),
       payload.testPath,
     );
-    const myPid = addon.getpid();
     const resp: WorkerResponse.Response = {
-      pid: myPid,
+      pid: process.pid,
       testResult: data,
     };
     console.log('writing to', payload.resultFifo.path);
@@ -239,6 +239,7 @@ function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
   // process.on('exit', () => {
   //   console.log('exit inside loop '+queuePath)
   // })
+  debugger
   const reader = createSyncFifoReader<WorkerInput.Input>(fifo)
 
   while (true) {
@@ -249,6 +250,7 @@ function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
       }
       case 'spinSnapshot': {
         const childPid = addon.fork(payload.snapFifo.id);
+        debugger
         const isChild = childPid === 0;
         if (isChild) {
           spinSnapshot(testEnv, payload).catch(err => {
@@ -257,6 +259,8 @@ function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
           }); 
           return 'child';
         } else {
+          // const inspector = require('inspector') as typeof import('inspector');
+          // inspector.close()
           continue;
         }
       }
@@ -268,10 +272,23 @@ function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
         const isChild = childPid === 0;
 
         if (isChild) {
+          // const inspector = require('inspector') as typeof import('inspector');
+          // const opts = process.env.NODE_OPTIONS.split(' ');
+          //           if (opts[0] === '--require') {
+          //               const mod = require.resolve(opts[1])
+          //               delete require.cache[mod];
+          //               delete global['$jsDebugIsRegistered']
+          //               console.log('executing', mod)
+          //               require(mod)
+          //           }
+          // inspector.close()
+          console.log('my pid', process.pid);
+          // inspector.open(0, undefined, false);
           handleChild(payload);
           return 'child';
         } else {
-          
+          // const inspector = require('inspector') as typeof import('inspector');
+          // inspector.close()
           continue;
         }
       }
