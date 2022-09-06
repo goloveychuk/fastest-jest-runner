@@ -22,12 +22,15 @@ import {ErrorWithStack, interopRequireDefault} from 'jest-util';
 import type {
   CreateSnapshotInput,
   JestConsole,
+  RunTest,
   TestFramework,
   TestFrameworkFactory,
 } from './types';
 import chalk = require('chalk');
 
 import {createScriptTransformer, ScriptTransformer, Transformer} from '@jest/transform';
+
+import { TestResult } from '@jest/test-result';
 
 
 // const localRequire = <T>(name: string):T =>  {
@@ -60,6 +63,7 @@ export interface TestEnv {
   testConsole: JestConsole;
   teardown: () => Promise<void>
   transformer: ScriptTransformer
+  runTest: RunTest
 }
 
 
@@ -342,7 +346,96 @@ export async function createTestEnv({
   // raw.mocks.clear()
   // cacheFS.clear()
   // global.gc()
+
+  const runTest = async (path: string) => {
+    const start = Date.now();
+    // console.log('started executing test', path);
+
+    try {
+      let result: TestResult;
+
+      try {
+        // if (collectV8Coverage) {
+        //   await runtime.collectV8Coverage();
+        // }
+        result = await testFramework(
+          // globalConfig,
+          // projectConfig,
+          // environment,
+          // runtime,
+          path,
+          // sendMessageToJest,
+        );
+      } catch (err: any) {
+        // Access stack before uninstalling sourcemaps
+        err.stack;
+
+        throw err;
+      } finally {
+        // if (collectV8Coverage) {
+        //   await runtime.stopCollectingV8Coverage();
+        // }
+        console.log('finished executing test', path);
+      }
+
+      // freezeConsole(testConsole, projectConfig);
+
+      const testCount =
+        result.numPassingTests +
+        result.numFailingTests +
+        result.numPendingTests +
+        result.numTodoTests;
+
+      const end = Date.now();
+      const testRuntime = end - start;
+      result.perfStats = {
+        end,
+        runtime: testRuntime,
+        slow: testRuntime / 1000 > projectConfig.slowTestThreshold,
+        start,
+      };
+      result.testFilePath = path;
+      result.console = testConsole.getBuffer();
+      result.skipped = testCount === result.numPendingTests;
+      result.displayName = projectConfig.displayName;
+
+      const coverage = runtime.getAllCoverageInfoCopy();
+      if (coverage) {
+        const coverageKeys = Object.keys(coverage);
+        if (coverageKeys.length) {
+          result.coverage = coverage;
+        }
+      }
+
+      // if (collectV8Coverage) {
+      //   const v8Coverage = runtime.getAllV8CoverageInfoCopy();
+      //   if (v8Coverage && v8Coverage.length > 0) {
+      //     result.v8Coverage = v8Coverage;
+      //   }
+      // }
+
+      if (globalConfig.logHeapUsage) {
+        //@ts-expect-error
+        globalThis.gc?.();
+
+        result.memoryUsage = process.memoryUsage().heapUsed;
+      }
+      // Delay the resolution to allow log messages to be output.
+
+      // todo unhandled rejections
+      // getSettingsMenuItems.unit 
+      // return result
+
+      return new Promise<TestResult>(resolve => {
+        setImmediate(() => resolve(result));
+      });
+    } finally {
+      await teardown()
+    }
+  }
+
   return {
+    runTest,
     environment,
     projectConfig,
     resolver,

@@ -6,6 +6,7 @@ import pLimit = require('p-limit');
 import * as os from 'os';
 import type { Test, TestEvents, TestResult } from '@jest/test-result';
 import type { TestWatcher } from 'jest-watcher';
+import inspector from 'inspector'
 
 import {
   CreateSnapshotInput,
@@ -92,7 +93,28 @@ class TestRunner extends EmittingTestRunner {
     //   return false;
     // });
 
+    if (inspector.url()) {
+      return this.runDebug(tests)
+    }
+
     return this.runSnapshotsTests(tests, watcher, options);
+  }
+
+  async runDebug(
+    tests: Array<Test>,
+    watcher: TestWatcher,
+
+  ) {
+    if (tests.length !== 1) {
+      throw new Error('Debug is supported for 1 test only')
+    }
+    if (watcher.isWatchMode()) {
+      throw new Error('Debug is not supported in watch mode')
+    }
+
+    const worker = require('worker') as typeof import('./worker');
+
+    // worker.
   }
 
   async runSnapshotsTests(
