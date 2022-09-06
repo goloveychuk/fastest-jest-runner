@@ -12,8 +12,7 @@
   "gypfile": true,
   "files": [
     "dist",
-    "package.json",
-    "build"
+    "package.json"
   ],
   "scripts": {
     "build:addon": "node-gyp rebuild",
