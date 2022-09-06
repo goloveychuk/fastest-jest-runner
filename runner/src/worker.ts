@@ -1,21 +1,24 @@
 import * as fs from 'fs';
-import {createTestEnv, TestEnv} from './create-test-env';
-import {CreateSnapshotInput, makeErrorResp, RunTest, WorkerInput, WorkerResponse} from './types';
-import {createSyncFifoReader} from './protocol';
+import { createTestEnv, TestEnv } from './create-test-env';
+import {
+  WorkerConfig,
+  makeErrorResp,
+  RunTest,
+  WorkerInput,
+  WorkerResponse,
+} from './types';
+import { createSyncFifoReader } from './protocol';
 import * as addon from './addon';
-import type {SnapshotBuilderModule} from './snapshot';
 import type { Fifo } from './fifo-maker';
+import RuntimeMod from 'jest-runtime';
+import HasteMap, { IModuleMap } from 'jest-haste-map';
+import { buildSnapshot } from './snapshot';
+
 
 // console.log(process.argv[2]);
 // fs.readFileSync(process.argv[2], 'utf8')
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-const snapshotInput: CreateSnapshotInput = JSON.parse(
-  fs.readFileSync(process.argv[2], 'utf8'),
-);
-
-
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const runGc = async () => {
   global.gc?.();
@@ -23,7 +26,6 @@ const runGc = async () => {
 
   await sleep(300); //waiting for gc??
 };
-
 
 function handleChild(testEnv: TestEnv, payload: WorkerInput.RunTest) {
   let handled = false;
@@ -34,97 +36,73 @@ function handleChild(testEnv: TestEnv, payload: WorkerInput.RunTest) {
       return;
     }
     handled = true;
-    // return new Promise<void>((resolve, reject) => {
-    // console.log('sending resp', input)
-    console.log(
-      'resultsasd',
-      Boolean((data.data as any).numPassingTests !== undefined),
-      payload.testPath,
-    );
+  
     const resp: WorkerResponse.Response = {
       pid: process.pid,
       testResult: data,
     };
     console.log('writing to', payload.resultFifo.path);
     fs.writeFileSync(payload.resultFifo.path, JSON.stringify(resp));
-    addon.sendThisProcOk()
+    addon.sendThisProcOk();
     // });
   };
 
-  process.on('unhandledRejection', (reason, _promise) => { //better to merge results
-    const throwOnUnhandled = false //todo
+  process.on('unhandledRejection', (reason, _promise) => {
+    //better to merge results
+    const throwOnUnhandled = false; //todo
     const err: Error = (reason as any) || new Error();
     const ignText = throwOnUnhandled ? '' : ' (ignored)';
     err.message = `unhandledRejection${ignText}: ${err.message}`;
     if (throwOnUnhandled) {
       handle(makeErrorResp(err));
     } else {
-      console.error(err)
+      console.error(err);
     }
   });
-  process.on('uncaughtException', err => {
+  process.on('uncaughtException', (err) => {
     err.message = 'uncaughtException: ' + err.message;
     handle(makeErrorResp(err));
   });
-  process.on('exit', code => {
+  process.on('exit', (code) => {
     if (handled) {
       return;
     }
     handle(makeErrorResp('exited before result: ' + code));
   });
 
-  testEnv.runTest(payload.testPath)
+  testEnv
+    .runTest(payload.testPath)
     .then(
-      data => handle({type: 'result', data}),
-      err => handle(makeErrorResp(err)),
+      (data) => handle({ type: 'result', data }),
+      (err) => handle(makeErrorResp(err)),
     )
-    .finally(() => {    
+    .finally(() => {
       console.log('exiting');
       process.exit(0);
     });
 }
 
-
-
-async function spinSnapshot(testEnv: TestEnv, payload: WorkerInput.SpinSnapshot) {
-  const {runtime } = testEnv;
-  const imp = async <T>(_mod: string): Promise<T> => {
-    const resolved = testEnv.resolver.resolveModule(
-      snapshotInput.snapshotConfig.snapshotBuilderPath,
-      _mod,
-    );
-    console.log('requiring', resolved);
-    const esm = runtime.unstable_shouldLoadAsEsm(resolved);
-
-    if (esm) {
-      const esmmod: any = await runtime.unstable_importModule(resolved);
-      return esmmod.exports
-    } else {
-      return runtime.requireModule(resolved);
-    }
-  };
-  //todo move to worker
-  //todo mb run snapshotBuilderPath in test context
-  const snapshotBuilder = await testEnv.transformer.requireAndTranspileModule<SnapshotBuilderModule>(snapshotInput.snapshotConfig.snapshotBuilderPath);
-
-  const build = snapshotBuilder.snapshots[payload.name];
-  if (!build) {
-    throw new Error('No snapshot with name: ' + payload.name);
-  }
-  await build({import: imp, global: testEnv.environment.global});
+async function spinSnapshot(
+  workerConfig: WorkerConfig,
+  testEnv: TestEnv,
+  payload: WorkerInput.SpinSnapshot,
+) {
+  await buildSnapshot(workerConfig.snapshotConfig, testEnv, payload.name);
   await runGc();
-
-  if (loop(testEnv, payload.snapFifo) === 'main') {
+  if (loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
     console.log('snapshot loop stopped: ' + payload.name);
-    addon.sendThisProcOk()
-    addon.waitForAllChildren()
+    addon.sendThisProcOk();
+    addon.waitForAllChildren();
     process.exit(0);
   }
 }
 
-function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
-
-  const reader = createSyncFifoReader<WorkerInput.Input>(fifo)
+function loop(
+  workerConfig: WorkerConfig,
+  testEnv: TestEnv,
+  fifo: Fifo,
+): 'child' | 'main' {
+  const reader = createSyncFifoReader<WorkerInput.Input>(fifo);
 
   while (true) {
     const payload = reader.read();
@@ -132,16 +110,15 @@ function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
       case 'stop': {
         return 'main';
       }
-        case 'spinSnapshot': {
-
-          const childPid = addon.fork(payload.snapFifo.id);
-          debugger
+      case 'spinSnapshot': {
+        const childPid = addon.fork(payload.snapFifo.id);
+        debugger;
         const isChild = childPid === 0;
         if (isChild) {
-          spinSnapshot(testEnv, payload).catch(err => {
+          spinSnapshot(workerConfig, testEnv, payload).catch((err) => {
             console.error('err in spinSnapshot', err);
             //todo handle properly
-          }); 
+          });
           return 'child';
         } else {
           continue;
@@ -169,35 +146,43 @@ function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
   }
 }
 
-async function setRunTestFn() {
-  console.log('before runtest create');
+function run(workerConfig: WorkerConfig) {
+  const moduleMap = HasteMap.getStatic(
+    workerConfig.projectConfig,
+  ).getModuleMapFromJSON(workerConfig.serializableModuleMap);
 
-  const testEnv = await createTestEnv(snapshotInput);
+  const resolver = RuntimeMod.createResolver(
+    workerConfig.projectConfig,
+    moduleMap,
+  );
 
-  await runGc();
+  createTestEnv({
+    context: workerConfig.context,
+    globalConfig: workerConfig.globalConfig,
+    projectConfig: workerConfig.projectConfig,
+    resolver,
+  })
+    .then(async (testEnv) => {
+      await runGc();
 
-  return { testEnv };
+      console.log('setRunTestFn');
+
+      console.log('before loop');
+      addon.startProcControl(workerConfig.procControlFifo.path);
+
+      if (loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
+        console.log('worker loop stopped');
+        addon.waitForAllChildren();
+        process.exit(0);
+      }
+    })
+    .catch((err) => {
+      console.error('err in setRunTestFn', err);
+      process.exit(1);
+    });
 }
 
-
-
-setRunTestFn()
-  .then(({testEnv}) => {
-    console.log('setRunTestFn');
-
-    console.log('before loop');
-    addon.startProcControl(snapshotInput.procControlFifo.path)
-
-    if (loop(testEnv, snapshotInput.workerFifo) === 'main') {
-      console.log('worker loop stopped');
-      addon.waitForAllChildren()
-      process.exit(0);
-    }
-    // setInterval(() => {
-    //   console.log('interval');
-    // }, 1000)
-  })
-  .catch(err => {
-    console.error('err in setRunTestFn', err);
-    process.exit(1);
-  });
+process.on('message', function handler(payload) {
+  process.off('message', handler);
+  run(payload);
+});

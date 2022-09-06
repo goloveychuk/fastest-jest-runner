@@ -4,28 +4,33 @@ import * as path from 'path';
 import Emittery = require('emittery');
 import pLimit = require('p-limit');
 import * as os from 'os';
-import type { Test, TestEvents, TestResult } from '@jest/test-result';
+import type {
+  SerializableError,
+  Test,
+  TestEvents,
+  TestResult,
+} from '@jest/test-result';
 import type { TestWatcher } from 'jest-watcher';
-import inspector from 'inspector'
+import inspector from 'inspector';
 
 import {
-  CreateSnapshotInput,
+  WorkerConfig,
   EmittingTestRunner,
   TestRunnerOptions,
   UnsubscribeFn,
   WorkerInput,
   WorkerResponse,
   makeErrorResp,
-  SnapshotConfig,
   FastestJestRunnerConfig,
 } from './types';
 
 import { FifoMaker } from './fifo-maker';
 import { OnProcExit, ProcControl } from './proc-control';
 import { createAsyncFifoWriter } from './protocol';
-import type { SnapshotBuilderModule } from './snapshot';
+import type { SnapshotBuilderModule, SnapshotConfig } from './snapshot';
 import { replaceRootDirInPath } from 'jest-config';
 import { createScriptTransformer } from '@jest/transform';
+import { Config } from '@jest/types';
 
 function setCleanupBeforeExit(clean: () => void) {
   let called = false;
@@ -94,27 +99,82 @@ class TestRunner extends EmittingTestRunner {
     // });
 
     if (inspector.url()) {
-      return this.runDebug(tests)
+      return this.runDebug(tests, watcher);
     }
 
     return this.runSnapshotsTests(tests, watcher, options);
   }
 
-  async runDebug(
-    tests: Array<Test>,
-    watcher: TestWatcher,
-
-  ) {
+  async runDebug(tests: Array<Test>, watcher: TestWatcher) {
     if (tests.length !== 1) {
-      throw new Error('Debug is supported for 1 test only')
+      throw new Error('Debug is supported for 1 test only');
     }
     if (watcher.isWatchMode()) {
-      throw new Error('Debug is not supported in watch mode')
+      throw new Error('Debug is not supported in watch mode');
     }
 
-    const worker = require('worker') as typeof import('./worker');
+    const { createTestEnv } = await import('./create-test-env');
+    const { buildSnapshot } = await import('./snapshot');
 
-    // worker.
+    const test = tests[0];
+    const { snapshotBuilder, snapshotConfig } = await this.getCommons(
+      test.context.config,
+    );
+
+    const resolver = test.context.resolver;
+    const testEnv = await createTestEnv({
+      context: this._context,
+      projectConfig: test.context.config,
+      globalConfig: this._globalConfig,
+      resolver,
+    });
+    const snapshotName = await snapshotBuilder.getSnapshot({
+      testPath: test.path,
+    });
+
+    await this.#eventEmitter.emit('test-file-start', [test]);
+
+    await buildSnapshot(snapshotConfig, testEnv, snapshotName);
+
+    try {
+      const result = await testEnv //todo need unhandled rejection from worker
+        .runTest(test.path);
+      await this.#eventEmitter.emit('test-file-success', [test, result]);
+    } catch (err) {
+      await this.#eventEmitter.emit('test-file-failure', [
+        test,
+        err as SerializableError,
+      ]);
+    }
+  }
+
+  async getCommons(projectConfig: Config.ProjectConfig) {
+    const fastestRunnerConfig = projectConfig.globals[
+      'fastest-jest-runner'
+    ] as FastestJestRunnerConfig;
+
+    const snapshotPath = replaceRootDirInPath(
+      projectConfig.rootDir,
+      fastestRunnerConfig.snapshotBuilderPath,
+    );
+
+    const snapshotConfig: SnapshotConfig = {
+      snapshotBuilderPath: snapshotPath,
+    };
+
+    const cacheFS = new Map<string, string>();
+    const transformer = await createScriptTransformer(projectConfig, cacheFS);
+
+    const snapshotBuilder =
+      await transformer.requireAndTranspileModule<SnapshotBuilderModule>(
+        snapshotConfig.snapshotBuilderPath,
+      );
+
+    return {
+      snapshotBuilder,
+      fastestRunnerConfig,
+      snapshotConfig,
+    };
   }
 
   async runSnapshotsTests(
@@ -156,44 +216,26 @@ class TestRunner extends EmittingTestRunner {
 
     const procLoop = procControl.loop();
 
-    const config = tests[0].context.config;
     const serializableModuleMap = tests[0].context.moduleMap.toJSON();
 
-    const fastestRunnerConfig = config.globals[
-      'fastest-jest-runner'
-    ] as FastestJestRunnerConfig;
-    const snapshotPath = replaceRootDirInPath(
-      config.rootDir,
-      fastestRunnerConfig.snapshotBuilderPath,
-    );
+    const projectConfig = tests[0].context.config;
 
-    const cacheFS = new Map<string, string>();
-    const transformer = await createScriptTransformer(config, cacheFS);
-
-    const snapshotConfig: SnapshotConfig = {
-      snapshotBuilderPath: snapshotPath,
-    };
-
-    const snapshotBuilder =
-      await transformer.requireAndTranspileModule<SnapshotBuilderModule>(
-        snapshotConfig.snapshotBuilderPath,
-      );
+    const { fastestRunnerConfig, snapshotConfig, snapshotBuilder } =
+      await this.getCommons(projectConfig);
 
     // const nodePath = '/home/badim/github/node/out/Release/node';
     // const snapshotConfig = await collectDeps(tests, config);
 
-    const createSnapshotInput: CreateSnapshotInput = {
+    const workerConfig: WorkerConfig = {
+      context: this._context,
+      projectConfig,
+      globalConfig: this._globalConfig,
+      snapshotConfig,
       workerFifo,
       procControlFifo,
-      allfiles: tests.map((t) => t.path),
-      snapshotConfig,
-      context: this._context,
-      projectConfig: config,
       serializableModuleMap,
-      globalConfig: this._globalConfig,
     };
 
-    fs.writeFileSync(confP, JSON.stringify(createSnapshotInput));
     const was = Date.now();
     // debugger
     const child = fork(
@@ -202,13 +244,10 @@ class TestRunner extends EmittingTestRunner {
       [
         // '--no-concurrent-recompilation',
         // '--v8-pool-size=0',
-
         // --turbo-filter=~ --no-concurrent-marking  --no-concurrent-sweeping
-
         // '--max-semi-space-size=1024',
         // '--noconcurrent_sweeping',
         // `--build-snapshot`, `--snapshot-blob`, `${snapPath}`,
-        confP,
       ],
       {
         execArgv: [
@@ -237,55 +276,8 @@ class TestRunner extends EmittingTestRunner {
       console.log('stderr', data.toString('utf-8'));
     });
 
-    // child.stdin.write()
-    // child.on('message', msg => {
-    //   console.log('got msg' + msg)
-    // })
+    child.send(workerConfig);
 
-    // let cur = 0;
-    // const inter = setInterval(() => {
-    //   if (!tests[cur]) {
-    //     clearInterval(inter);
-    //     return;
-    //   }
-    //   child.stdin!.cork();
-    //   for (const d of serialize({testPath: tests[cur]})) {
-    //     child.stdin!.write(d);
-    //   }
-    //   child.stdin!.uncork();
-    //   cur += 1;
-    // }, 5000);
-    // });
-
-    // child.on('message', function handler(msg) {
-    //   console.log('got msg in main' + msg)
-    // })
-    // return;
-    // console.log(res.stdout);
-    // if (res.status !== 0) {
-    //   console.log(res.stderr);
-    //   throw new Error('err in res ' + res.stdout + res.stderr);
-    // }
-    // throw console.error
-    // console.log(
-    //   'snapshot built ' +
-    //     Math.round(fs.statSync(snapPath).size / 1024 / 1024) +
-    //     'mb, took ' +
-    //     Math.round((Date.now() - was) / 1000) +
-    //     's',
-    // );
-    // throw res.stdout
-    // for (const t of tests) {
-
-    // const res2 = fork(runtimeEntry, [], {
-    //   execArgv: [`--snapshot-blob`, `${snapPath}`], //process.argv are not overriden
-    //   stdio: 'inherit'
-    // });
-    // res2.send(testfile)
-    // res2.on('message', console.log)
-    // console.log([`--snapshot-blob`, `${snapPath}`, runtimeEntry, testfile])
-    // console.log(nodePath, `--snapshot-blob`, `${snapPath}`, runtimeEntry)
-    // options.serial ? 1 :
     const concurrency = options.serial ? 1 : this._globalConfig.maxWorkers;
     // let concurrency = 25;
     console.log({ concurrency });

@@ -20,6 +20,8 @@ import type RuntimeType from 'jest-runtime';
 import type {TestWatcher} from 'jest-watcher';
 
 import type {Fifo} from './fifo-maker';
+import { SnapshotConfig } from './snapshot';
+
 
 export type ErrorWithCode = Error & {code?: string};
 
@@ -144,16 +146,19 @@ export abstract class EmittingTestRunner
 
 export type JestTestRunner = CallbackTestRunner | EmittingTestRunner;
 
-export interface CreateSnapshotInput {
-  workerFifo: Fifo;
-  procControlFifo: Fifo;
-  allfiles: Array<string>;
+
+
+export interface WorkerConfig {
   projectConfig: Config.ProjectConfig;
   globalConfig: Config.GlobalConfig;
-  serializableModuleMap: SerializableModuleMap;
   context: TestRunnerContext;
   snapshotConfig: SnapshotConfig;
+
+  workerFifo: Fifo;
+  procControlFifo: Fifo;
+  serializableModuleMap: SerializableModuleMap;
 }
+
 
 export type JestConsole = Console & {
   getBuffer: () => ConsoleBuffer | undefined;
@@ -219,7 +224,3 @@ export const makeErrorResp = (
 };
 
 
-export interface SnapshotConfig {
-  //   imports: Array<{from: string; allImports: string[]}>;
-    snapshotBuilderPath: string
-  }

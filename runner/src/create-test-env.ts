@@ -15,16 +15,14 @@ import type {Config} from '@jest/types';
 // import LeakDetector from 'jest-leak-detector';
 import {formatExecError} from 'jest-message-util';
 import type Resolver from 'jest-resolve';
-import RuntimeMod from 'jest-runtime';
-import HasteMap, { IModuleMap } from 'jest-haste-map';
+
 import type RuntimeClass from 'jest-runtime';
 import {ErrorWithStack, interopRequireDefault} from 'jest-util';
 import type {
-  CreateSnapshotInput,
   JestConsole,
   RunTest,
   TestFramework,
-  TestFrameworkFactory,
+  TestRunnerContext,
 } from './types';
 import chalk = require('chalk');
 
@@ -97,17 +95,16 @@ function freezeConsole(testConsole: JestConsole, config: Config.ProjectConfig) {
 
 export async function createTestEnv({
   context,
-  serializableModuleMap,
   globalConfig,
   projectConfig,
-}: CreateSnapshotInput): Promise<TestEnv> {
-  const moduleMap = HasteMap.getStatic(projectConfig).getModuleMapFromJSON(
-    serializableModuleMap,
-  );
+  resolver
+}: {
+  resolver: Resolver
+  projectConfig: Config.ProjectConfig;
+  globalConfig: Config.GlobalConfig;
+  context: TestRunnerContext;
+}): Promise<TestEnv> {
   
-
-  const resolver = RuntimeMod.createResolver(projectConfig, moduleMap);
-
   //  const testSource = fs.readFileSync(path, 'utf8');
   //  const docblockPragmas = docblock.parse(docblock.extract(testSource));
   const docblockPragmas: Record<string, string | Array<string>> = {};
