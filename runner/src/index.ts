@@ -183,17 +183,12 @@ class TestRunner extends EmittingTestRunner {
     options: TestRunnerOptions,
   ) {
     const snapEntry = require.resolve('./snapshot-entry');
-    // const rootDir = '/tmp/jj'
-    // const rootDir = '/dev/shm/jj'
-    // const rootDir = '/mnt/tmp/jj';
+    
     const rootDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'fastest-jest-runner-'),
     );
-    //todo on before exit remove rootDir
+    //todo setCleanupBeforeExit
 
-    const confP = path.join(rootDir, 'config.json');
-    // fs.mkdirSync(rootDir, {recursive: true});
-    // const snapPath = path.join(rootDir, 'snapshot.blob');
 
     const fifoMaker = new FifoMaker(rootDir);
     const workerFifo = fifoMaker.makeFifo('worker');
@@ -267,7 +262,6 @@ class TestRunner extends EmittingTestRunner {
       console.log('Tests left:', Array.from(testsLeft).join('\n'));
       // }
     });
-    // child.stdin.
 
     child.stdout!.on('data', (data) => {
       console.log('stdout', data.toString('utf-8'));
