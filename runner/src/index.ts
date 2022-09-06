@@ -173,7 +173,7 @@ class TestRunner extends EmittingTestRunner {
 
     fs.writeFileSync(confP, JSON.stringify(createSnapshotInput));
     const was = Date.now();
-    debugger
+    // debugger
     const child = fork(
       // 'node',
       snapEntry,
@@ -191,6 +191,7 @@ class TestRunner extends EmittingTestRunner {
       {
         execArgv: [
           `--max-old-space-size=${fastestRunnerConfig.maxOldSpace}`,
+          '--experimental-vm-modules',
           '--expose-gc',
           '--v8-pool-size=0',
           '--single-threaded',

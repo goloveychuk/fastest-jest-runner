@@ -187,9 +187,9 @@ export default async function jasmine2(
     const testNameRegex = new RegExp(globalConfig.testNamePattern, 'i');
     env.specFilter = (spec: Spec) => testNameRegex.test(spec.getFullName());
   }
-  const esm = runtime.unstable_shouldLoadAsEsm(testPath);
-
+  
   return async  (testPath: string) => {
+    const esm = runtime.unstable_shouldLoadAsEsm(testPath);
     
     if (esm) {
       await runtime.unstable_importModule(testPath);

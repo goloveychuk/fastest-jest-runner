@@ -13,11 +13,10 @@
   "files": [
     "dist",
     "package.json",
-    "binding.gyp",
-    "addon"
+    "build"
   ],
   "scripts": {
-    "postinstall": "node-gyp rebuild",
+    "build:addon": "node-gyp rebuild",
     "build": "rm -rf dist && tsc",
     "watch": "rm -rf dist && tsc --watch"
   },

@@ -1,7 +1,7 @@
 import {Global} from '@jest/types'
 
 interface Builder {
-  require(name: string): void;
+  import<T>(name: string): Promise<T>;
   global: Global.Global;
   // snapshot(name: string): void
   // fork(fn1: () => void, fn2: () => void): void

@@ -208,13 +208,22 @@ function handleChild(payload: WorkerInput.RunTest) {
 
 
 async function spinSnapshot(testEnv: TestEnv, payload: WorkerInput.SpinSnapshot) {
-  const req = (mod: string) => {
+  const {runtime } = testEnv;
+  const imp = async <T>(_mod: string): Promise<T> => {
     const resolved = testEnv.resolver.resolveModule(
       snapshotInput.snapshotConfig.snapshotBuilderPath,
-      mod,
+      _mod,
     );
     console.log('requiring', resolved);
-    return testEnv.runtime.requireModule(resolved);
+    const esm = runtime.unstable_shouldLoadAsEsm(resolved);
+
+    if (esm) {
+      const esmmod = await runtime.unstable_importModule(resolved);
+      console.log({esmmod})
+      return esmmod.exports
+    } else {
+      return runtime.requireModule(resolved);
+    }
   };
   //todo move to worker
   //todo mb run snapshotBuilderPath in test context
@@ -224,7 +233,7 @@ async function spinSnapshot(testEnv: TestEnv, payload: WorkerInput.SpinSnapshot)
   if (!build) {
     throw new Error('No snapshot with name: ' + payload.name);
   }
-  await build({require: req, global: testEnv.environment.global});
+  await build({import: imp, global: testEnv.environment.global});
   await runGc();
 
   if (loop(testEnv, payload.snapFifo) === 'main') {
@@ -234,12 +243,12 @@ async function spinSnapshot(testEnv: TestEnv, payload: WorkerInput.SpinSnapshot)
     process.exit(0);
   }
 }
-
+console.log(process.execArgv)
 function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
   // process.on('exit', () => {
   //   console.log('exit inside loop '+queuePath)
   // })
-  debugger
+  // debugger
   const reader = createSyncFifoReader<WorkerInput.Input>(fifo)
 
   while (true) {
@@ -248,9 +257,10 @@ function loop(testEnv: TestEnv, fifo: Fifo): 'child' | 'main' {
       case 'stop': {
         return 'main';
       }
-      case 'spinSnapshot': {
-        const childPid = addon.fork(payload.snapFifo.id);
-        debugger
+        case 'spinSnapshot': {
+
+          const childPid = addon.fork(payload.snapFifo.id);
+          debugger
         const isChild = childPid === 0;
         if (isChild) {
           spinSnapshot(testEnv, payload).catch(err => {
