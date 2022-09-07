@@ -182,7 +182,7 @@ class TestRunner extends EmittingTestRunner {
     watcher: TestWatcher,
     options: TestRunnerOptions,
   ) {
-    const snapEntry = require.resolve('./snapshot-entry');
+    const workerPath = require.resolve('./worker');
     
     const rootDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'fastest-jest-runner-'),
@@ -233,9 +233,11 @@ class TestRunner extends EmittingTestRunner {
 
     const was = Date.now();
     // debugger
+    const currentArgv = process.execArgv;
+
     const child = fork(
       // 'node',
-      snapEntry,
+      workerPath,
       [
         // '--no-concurrent-recompilation',
         // '--v8-pool-size=0',
@@ -246,8 +248,8 @@ class TestRunner extends EmittingTestRunner {
       ],
       {
         execArgv: [
+          ...currentArgv,
           `--max-old-space-size=${fastestRunnerConfig.maxOldSpace}`,
-          '--experimental-vm-modules',
           '--expose-gc',
           '--v8-pool-size=0',
           '--single-threaded',

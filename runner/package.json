@@ -11,6 +11,8 @@
   "types": "./dist/index.d.ts",
   "gypfile": true,
   "files": [
+    "addon",
+    "binding.gyp",
     "dist",
     "package.json"
   ],
