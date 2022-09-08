@@ -12,6 +12,7 @@ import type {
 } from '@jest/test-result';
 import type { TestWatcher } from 'jest-watcher';
 import inspector from 'inspector';
+import * as docblock from 'jest-docblock';
 
 import {
   WorkerConfig,
@@ -105,6 +106,8 @@ class TestRunner extends EmittingTestRunner {
     return this.runSnapshotsTests(tests, watcher, options);
   }
 
+
+
   async runDebug(tests: Array<Test>, watcher: TestWatcher) {
     if (tests.length !== 1) {
       throw new Error('Debug is supported for 1 test only');
@@ -117,7 +120,7 @@ class TestRunner extends EmittingTestRunner {
     const { buildSnapshot } = await import('./snapshot');
 
     const test = tests[0];
-    const { snapshotBuilder, snapshotConfig } = await this.getCommons(
+    const { getSnapshotName, snapshotConfig } = await this.getCommons(
       test.context.config,
     );
 
@@ -128,9 +131,11 @@ class TestRunner extends EmittingTestRunner {
       globalConfig: this._globalConfig,
       resolver,
     });
-    const snapshotName = await snapshotBuilder.getSnapshot({
-      testPath: test.path,
-    });
+
+
+    const snapshotName = await getSnapshotName(
+      test
+    );
 
     await this.#eventEmitter.emit('test-file-start', [test]);
 
@@ -170,8 +175,37 @@ class TestRunner extends EmittingTestRunner {
         snapshotConfig.snapshotBuilderPath,
       );
 
+    const validateSnapshotName = (name: string): string => {
+      if (snapshotBuilder.snapshots[name]) {
+        return name
+      }
+      throw new Error(`Snapshot "${name}" not found, available snapshots: ${Object.keys(snapshotBuilder.snapshots).join(', ')}`);
+    }
+
+    const getSnapshotName = async (test: Test) => {
+      const testSource = await fs.promises.readFile(test.path, 'utf-8');
+      const docblockPragmas = docblock.parse(docblock.extract(testSource));
+      const customSnapshotName = docblockPragmas['jest-snapshot'];
+      if (customSnapshotName) {
+        if (Array.isArray(customSnapshotName)) {
+          throw new Error(
+            `You can only define a single snapshot name through docblocks, got "${customSnapshotName.join(
+              ', ',
+            )}"`,
+          );
+        }
+        return validateSnapshotName(customSnapshotName);
+      }
+      const snapshotName = await snapshotBuilder.getSnapshot({
+        testPath: test.path,
+        docblockPragmas
+      });
+
+      return validateSnapshotName(snapshotName)
+    }
+
     return {
-      snapshotBuilder,
+      getSnapshotName,
       fastestRunnerConfig,
       snapshotConfig,
     };
@@ -215,7 +249,7 @@ class TestRunner extends EmittingTestRunner {
 
     const projectConfig = tests[0].context.config;
 
-    const { fastestRunnerConfig, snapshotConfig, snapshotBuilder } =
+    const { fastestRunnerConfig, snapshotConfig, getSnapshotName } =
       await this.getCommons(projectConfig);
 
     // const nodePath = '/home/badim/github/node/out/Release/node';
@@ -306,9 +340,7 @@ class TestRunner extends EmittingTestRunner {
     const runTest = async (test: Test): Promise<TestResult> => {
       testsLeft.add(test.path);
       // return new Promise<TestResult>((resolve, reject) => {
-      const snapshotName = await snapshotBuilder.getSnapshot({
-        testPath: test.path,
-      });
+      const snapshotName = await getSnapshotName(test);
 
       const snapshotObj = await initOrGetSnapshot(snapshotName);
 
@@ -427,4 +459,4 @@ class CancelRun extends Error {
 
 export default TestRunner;
 
-export type { SnapshotBuilder } from './snapshot';
+export type { SnapshotBuilder, BuildSnapshotFn, SnapshotBuilderContext, GetSnapshotConfig } from './snapshot';

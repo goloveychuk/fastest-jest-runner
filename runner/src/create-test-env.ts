@@ -277,14 +277,14 @@ export async function createTestEnv({
   };
 
   // For tests
-  // runtime
-  //   .requireInternalModule<typeof import('source-map-support')>(
-  //     require.resolve('source-map-support'),
-  //   )
-    // .install(sourcemapOptions);
+  runtime
+    .requireInternalModule<typeof import('source-map-support')>(
+      require.resolve('source-map-support'),
+    )
+    .install(sourcemapOptions);
 
   // For runtime errors
-  // sourcemapSupport.install(sourcemapOptions);
+  sourcemapSupport.install(sourcemapOptions);
 
   if (
     false
@@ -322,7 +322,6 @@ export async function createTestEnv({
   const teardown = async () => {
     runtime.teardown();
     await environment.teardown();
-
     sourcemapSupport.resetRetrieveHandlers();
   }
 
