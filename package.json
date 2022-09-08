@@ -1,9 +1,13 @@
 {
     "private": true,
     "workspaces": {
-        "packages": ["runner"]
+        "packages": [
+            "runner"
+        ]
     },
     "scripts": {
-        
-    }
+        "build": "yarn workspaces foreach --parallel --topological-dev --interlaced --verbose run build",
+        "test": "yarn workspaces foreach --parallel --topological-dev --interlaced --verbose run test"
+    },
+    "packageManager": "yarn@3.2.3"
 }
