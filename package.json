@@ -2,5 +2,8 @@
     "private": true,
     "workspaces": {
         "packages": ["runner"]
+    },
+    "scripts": {
+        
     }
 }
