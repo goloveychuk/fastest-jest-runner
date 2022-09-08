@@ -7,7 +7,8 @@
     },
     "scripts": {
         "build": "yarn workspaces foreach --parallel --topological-dev --interlaced --verbose run build",
-        "test": "yarn workspaces foreach --parallel --topological-dev --interlaced --verbose run test"
+        "test": "yarn workspaces foreach --parallel --topological-dev --interlaced --verbose run test",
+        "publish": "yarn workspaces foreach --topological-dev --interlaced --verbose run publish"
     },
     "packageManager": "yarn@3.2.3"
 }
