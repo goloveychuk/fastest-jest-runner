@@ -1,0 +1,6 @@
+{
+    "jest": {
+        "runner": "fastest-jest-runner",
+        "testEnvironment": "jsdom"
+    }
+}

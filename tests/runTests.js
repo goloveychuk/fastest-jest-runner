@@ -4,7 +4,7 @@ const path = require('path')
 
 const jestPath = execSync("yarn bin jest").toString().trim()
 
-const root = __dirname;
+const root = path.join(__dirname, 'e2e');
 
 const focus = process.argv[2]
 
@@ -14,7 +14,7 @@ const allDirs = focus ? [focus] : readdirSync(root, {withFileTypes: true}).filte
 
 for (const d of allDirs) {
     console.log('Running tests in', d)
-    const abs = path.join(__dirname, d)
+    const abs = path.join(root, d)
     const res = spawnSync("node", [jestPath], {cwd: abs, stdio: 'inherit'})
     // console.log(res.stdout)
     // console.log(res.stderr)

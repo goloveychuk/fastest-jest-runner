@@ -398,6 +398,7 @@ export async function createTestEnv({
       const end = Date.now();
       const testRuntime = end - start;
       result.perfStats = {
+        ...result.perfStats,
         end,
         runtime: testRuntime,
         slow: testRuntime / 1000 > projectConfig.slowTestThreshold,

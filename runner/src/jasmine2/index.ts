@@ -6,19 +6,19 @@
  */
 
 import * as path from 'path';
-import type {JestEnvironment} from '@jest/environment';
-import {getCallsite} from '@jest/source-map';
-import type {AssertionResult, TestResult} from '@jest/test-result';
-import type {Config, Global} from '@jest/types';
+import type { JestEnvironment } from '@jest/environment';
+import { getCallsite } from '@jest/source-map';
+import type { AssertionResult, TestResult } from '@jest/test-result';
+import type { Config, Global } from '@jest/types';
 import type Runtime from 'jest-runtime';
-import type {SnapshotState} from 'jest-snapshot';
-import {ErrorWithStack} from 'jest-util';
+import type { SnapshotState } from 'jest-snapshot';
+import { ErrorWithStack } from 'jest-util';
 import installEach from './each';
-import {installErrorOnPrivate} from './errorOnPrivate';
+import { installErrorOnPrivate } from './errorOnPrivate';
 import type Spec from './jasmine/Spec';
 import jasmineAsyncInstall from './jasmineAsyncInstall';
 import JasmineReporter from './reporter';
-export type {Jasmine} from './types';
+export type { Jasmine } from './types';
 
 const JASMINE = require.resolve('./jasmine/jasmineLight');
 
@@ -145,7 +145,7 @@ export default async function jasmine2(
     .requireInternalModule<typeof import('./jestExpect')>(
       path.resolve(__dirname, './jestExpect.js'),
     )
-    .default({expand: globalConfig.expand});
+    .default({ expand: globalConfig.expand });
 
   if (globalConfig.errorOnDeprecated) {
     installErrorOnPrivate(environment.global);
@@ -187,25 +187,28 @@ export default async function jasmine2(
     const testNameRegex = new RegExp(globalConfig.testNamePattern, 'i');
     env.specFilter = (spec: Spec) => testNameRegex.test(spec.getFullName());
   }
-  
-  return async  (testPath: string) => {
+
+  return async (testPath: string) => {
     const esm = runtime.unstable_shouldLoadAsEsm(testPath);
-    
+
+    let was = Date.now();
     if (esm) {
       await runtime.unstable_importModule(testPath);
     } else {
-      // let was = Date.now();
       runtime.requireModule(testPath);
-      // console.log('req test elapsed', Date.now() - was);
     }
+    const requireTook = Date.now() - was;
     await env.execute();
     const results = await reporter.getResults();
+    //@ts-expect-error
+    results.perfStats = { requireTook };
+
     return addSnapshotData(results, snapshotState);
-  } 
+  };
 }
 
 const addSnapshotData = (results: TestResult, snapshotState: SnapshotState) => {
-  results.testResults.forEach(({fullName, status}: AssertionResult) => {
+  results.testResults.forEach(({ fullName, status }: AssertionResult) => {
     if (status === 'pending' || status === 'failed') {
       // if test is skipped or failed, we don't want to mark
       // its snapshots as obsolete.

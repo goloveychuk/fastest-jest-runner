@@ -1,0 +1,11 @@
+{
+    "jest": {
+        "testRunner": "jasmine2",
+        "runner": "fastest-jest-runner",
+        "reporters": [
+
+              "<rootDir>/reporter.js"
+
+        ]
+    }
+}

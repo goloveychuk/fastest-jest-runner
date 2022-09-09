@@ -5,6 +5,7 @@
     },
     "devDependencies": {
         "fastest-jest-runner": "*",
-        "jest": "29.0.1"
+        "jest": "29.0.1",
+        "jest-environment-jsdom": "29.0.1"
     }
 }
