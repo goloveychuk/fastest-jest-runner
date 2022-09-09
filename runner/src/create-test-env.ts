@@ -8,28 +8,32 @@ import {
   NullConsole,
   getConsoleOutput,
 } from '@jest/console';
-import type {JestEnvironment} from '@jest/environment';
+import type { JestEnvironment } from '@jest/environment';
 
-import type {Config} from '@jest/types';
+import type { Config } from '@jest/types';
 // import * as docblock from 'jest-docblock';
 // import LeakDetector from 'jest-leak-detector';
-import {formatExecError} from 'jest-message-util';
+import { formatExecError } from 'jest-message-util';
 import type Resolver from 'jest-resolve';
 
 import type RuntimeClass from 'jest-runtime';
-import {ErrorWithStack, interopRequireDefault} from 'jest-util';
+import { ErrorWithStack, interopRequireDefault } from 'jest-util';
 import type {
   JestConsole,
   RunTest,
   TestFramework,
+  TestFrameworkFactory,
   TestRunnerContext,
 } from './types';
 import chalk = require('chalk');
 
-import {createScriptTransformer, ScriptTransformer, Transformer} from '@jest/transform';
+import {
+  createScriptTransformer,
+  ScriptTransformer,
+  Transformer,
+} from '@jest/transform';
 
 import { TestResult } from '@jest/test-result';
-
 
 // const localRequire = <T>(name: string):T =>  {
 //   const req = Module.createRequire('/home/badim/work/santa-editor-parent2/santa-editor')
@@ -38,7 +42,6 @@ import { TestResult } from '@jest/test-result';
 // }
 
 // const {ScriptTransformer} = localRequire<typeof import('@jest/transform')>('@jest/transform')
-
 
 // async function createScriptTransformer(
 //   config: Config.ProjectConfig,
@@ -57,13 +60,12 @@ export interface TestEnv {
   testFramework: TestFramework;
   globalConfig: Config.GlobalConfig;
   projectConfig: Config.ProjectConfig;
-  environment: JestEnvironment
+  environment: JestEnvironment;
   testConsole: JestConsole;
-  teardown: () => Promise<void>
-  transformer: ScriptTransformer
-  runTest: RunTest
+  teardown: () => Promise<void>;
+  transformer: ScriptTransformer;
+  runTest: RunTest;
 }
-
 
 function freezeConsole(testConsole: JestConsole, config: Config.ProjectConfig) {
   // @ts-expect-error: `_log` is `private` - we should figure out some proper API here
@@ -83,7 +85,7 @@ function freezeConsole(testConsole: JestConsole, config: Config.ProjectConfig) {
     const formattedError = formatExecError(
       error,
       config,
-      {noStackTrace: false},
+      { noStackTrace: false },
       undefined,
       true,
     );
@@ -97,14 +99,13 @@ export async function createTestEnv({
   context,
   globalConfig,
   projectConfig,
-  resolver
+  resolver,
 }: {
-  resolver: Resolver
+  resolver: Resolver;
   projectConfig: Config.ProjectConfig;
   globalConfig: Config.GlobalConfig;
   context: TestRunnerContext;
 }): Promise<TestEnv> {
-  
   //  const testSource = fs.readFileSync(path, 'utf8');
   //  const docblockPragmas = docblock.parse(docblock.extract(testSource));
   const docblockPragmas: Record<string, string | Array<string>> = {};
@@ -150,7 +151,19 @@ export async function createTestEnv({
   //       : projectConfig.testRunner,
   //   );
 
-  const testFrameworkFactory = (interopRequireDefault(require('./jasmine2')) as typeof import('./jasmine2')).default
+  let testRunnerPath: string;
+  console.log(projectConfig.testRunner);
+  if (projectConfig.testRunner.includes('/jest-circus/')) {
+    testRunnerPath = require.resolve('./jest-circus');
+  } else if (projectConfig.testRunner.includes('/jest-jasmine2/')) {
+    testRunnerPath = require.resolve('./jasmine2');
+  } else {
+    throw new Error('only circus or jasmine2 supported');
+  }
+
+  const testFrameworkFactory = await transformer.requireAndTranspileModule<TestFrameworkFactory>(
+    testRunnerPath,
+  );
 
   const Runtime: typeof RuntimeClass = interopRequireDefault(
     projectConfig.runtime
@@ -261,7 +274,7 @@ export async function createTestEnv({
   const sourcemapOptions: sourcemapSupport.Options = {
     environment: 'node',
     handleUncaughtExceptions: false,
-    retrieveSourceMap: source => {
+    retrieveSourceMap: (source) => {
       const sourceMapSource = runtime.getSourceMaps()?.get(source);
 
       if (sourceMapSource) {
@@ -286,9 +299,7 @@ export async function createTestEnv({
   // For runtime errors
   sourcemapSupport.install(sourcemapOptions);
 
-  if (
-    false
-  ) {
+  if (false) {
     const realExit = environment.global.process.exit;
 
     environment.global.process.exit = function exit(...args: Array<any>) {
@@ -300,7 +311,7 @@ export async function createTestEnv({
       const formattedError = formatExecError(
         error,
         projectConfig,
-        {noStackTrace: false},
+        { noStackTrace: false },
         undefined,
         true,
       );
@@ -318,12 +329,11 @@ export async function createTestEnv({
 
   await environment.setup();
 
-
   const teardown = async () => {
     runtime.teardown();
     await environment.teardown();
     sourcemapSupport.resetRetrieveHandlers();
-  }
+  };
 
   // for (const path of projectConfig.setupFilesAfterEnv) { //is dublicated
   //   const esm = runtime.unstable_shouldLoadAsEsm(path);
@@ -334,7 +344,12 @@ export async function createTestEnv({
   //     runtime.requireModule(path);
   //   }
   // }
-  const testFramework = await testFrameworkFactory(globalConfig, projectConfig, environment, runtime);
+  const testFramework = await testFrameworkFactory(
+    globalConfig,
+    projectConfig,
+    environment,
+    runtime,
+  );
 
   // let raw = moduleMap.getRawModuleMap()
   // raw.duplicates.clear()
@@ -419,16 +434,16 @@ export async function createTestEnv({
       // Delay the resolution to allow log messages to be output.
 
       // todo unhandled rejections
-      // getSettingsMenuItems.unit 
+      // getSettingsMenuItems.unit
       // return result
 
-      return new Promise<TestResult>(resolve => {
+      return new Promise<TestResult>((resolve) => {
         setImmediate(() => resolve(result));
       });
     } finally {
-      await teardown()
+      await teardown();
     }
-  }
+  };
 
   return {
     runTest,

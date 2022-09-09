@@ -1,0 +1,5 @@
+{
+    "jest": {
+        "runner": "fastest-jest-runner"
+    }
+}
