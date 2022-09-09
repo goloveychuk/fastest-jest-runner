@@ -2,6 +2,8 @@
     "private": true,
     "workspaces": {
         "packages": [
+            "tests",
+            "tests/**",
             "runner"
         ]
     },

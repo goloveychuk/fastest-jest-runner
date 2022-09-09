@@ -1,0 +1,10 @@
+{
+    "private": true,
+    "scripts": {
+        "test": "node ./runTests.js"
+    },
+    "devDependencies": {
+        "fastest-jest-runner": "*",
+        "jest": "29.0.1"
+    }
+}

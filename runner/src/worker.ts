@@ -11,8 +11,8 @@ import { createSyncFifoReader } from './protocol';
 import * as addon from './addon';
 import type { Fifo } from './fifo-maker';
 import RuntimeMod from 'jest-runtime';
-import HasteMap, { IModuleMap } from 'jest-haste-map';
-import { buildSnapshot } from './snapshot';
+import HasteMap from 'jest-haste-map';
+import { buildSnapshot } from './snapshots/build';
 
 
 // console.log(process.argv[2]);

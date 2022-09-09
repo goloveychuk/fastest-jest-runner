@@ -7,6 +7,7 @@
 
 import type {ConsoleBuffer} from '@jest/console';
 import type {JestEnvironment} from '@jest/environment';
+import * as path from 'path'
 import type {
   SerializableError,
   Test,
@@ -20,7 +21,7 @@ import type RuntimeType from 'jest-runtime';
 import type {TestWatcher} from 'jest-watcher';
 
 import type {Fifo} from './fifo-maker';
-import { SnapshotConfig } from './snapshot';
+import { SnapshotConfig } from './snapshots/types';
 
 
 export type ErrorWithCode = Error & {code?: string};
@@ -122,10 +123,20 @@ export abstract class CallbackTestRunner
 }
 
 
-export interface FastestJestRunnerConfig  {
+export interface NormalizedFastestJestRunnerConfig  {
   snapshotBuilderPath: string
-  maxOldSpace: number
+  maxOldSpace: number | undefined
 }
+
+type InputFastestJestRunnerConfig = undefined | Partial<NormalizedFastestJestRunnerConfig>
+
+export function normalizeRunnerConfig(conf: InputFastestJestRunnerConfig): NormalizedFastestJestRunnerConfig {
+  const maxOldSpace = conf?.maxOldSpace
+
+  const snapshotBuilderPath = conf?.snapshotBuilderPath ?? require.resolve('./snapshots/defaultSnapshotBuilder')
+  return {maxOldSpace, snapshotBuilderPath}
+}
+ 
 export abstract class EmittingTestRunner
   extends BaseTestRunner
   implements EmittingTestRunnerInterface

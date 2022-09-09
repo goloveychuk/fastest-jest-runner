@@ -22,13 +22,14 @@ import {
   WorkerInput,
   WorkerResponse,
   makeErrorResp,
-  FastestJestRunnerConfig,
+  NormalizedFastestJestRunnerConfig,
+  normalizeRunnerConfig,
 } from './types';
 
 import { FifoMaker } from './fifo-maker';
 import { OnProcExit, ProcControl } from './proc-control';
 import { createAsyncFifoWriter } from './protocol';
-import type { SnapshotBuilderModule, SnapshotConfig } from './snapshot';
+import type { SnapshotBuilderModule, SnapshotConfig } from './snapshots/types';
 import { replaceRootDirInPath } from 'jest-config';
 import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
@@ -117,7 +118,7 @@ class TestRunner extends EmittingTestRunner {
     }
 
     const { createTestEnv } = await import('./create-test-env');
-    const { buildSnapshot } = await import('./snapshot');
+    const { buildSnapshot } = await import('./snapshots/build');
 
     const test = tests[0];
     const { getSnapshotName, snapshotConfig } = await this.getCommons(
@@ -154,9 +155,9 @@ class TestRunner extends EmittingTestRunner {
   }
 
   async getCommons(projectConfig: Config.ProjectConfig) {
-    const fastestRunnerConfig = projectConfig.globals[
+    const fastestRunnerConfig = normalizeRunnerConfig(projectConfig.globals[
       'fastest-jest-runner'
-    ] as FastestJestRunnerConfig;
+    ] as any)
 
     const snapshotPath = replaceRootDirInPath(
       projectConfig.rootDir,
@@ -283,7 +284,7 @@ class TestRunner extends EmittingTestRunner {
       {
         execArgv: [
           ...currentArgv,
-          `--max-old-space-size=${fastestRunnerConfig.maxOldSpace}`,
+          ...(fastestRunnerConfig.maxOldSpace ? [`--max-old-space-size=${fastestRunnerConfig.maxOldSpace}`] : []),
           '--expose-gc',
           '--v8-pool-size=0',
           '--single-threaded',
@@ -459,4 +460,4 @@ class CancelRun extends Error {
 
 export default TestRunner;
 
-export type { SnapshotBuilder, BuildSnapshotFn, SnapshotBuilderContext, GetSnapshotConfig } from './snapshot';
+export *  from './snapshots/public';
