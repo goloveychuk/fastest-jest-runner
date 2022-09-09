@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build:addon": "node-gyp rebuild",
-    "build": "rm -rf dist && tsc",
+    "build": "yarn run build:addon && rm -rf dist && tsc",
     "watch": "rm -rf dist && tsc --watch",
     "publish": "yarn npm publish"
   },
