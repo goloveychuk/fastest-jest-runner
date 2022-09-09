@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as fs from 'graceful-fs';
 import sourcemapSupport = require('source-map-support');
 import {
@@ -151,19 +152,16 @@ export async function createTestEnv({
   //       : projectConfig.testRunner,
   //   );
 
-  let testRunnerPath: string;
-  console.log(projectConfig.testRunner);
+  let testFrameworkFactory: TestFrameworkFactory; 
+
   if (projectConfig.testRunner.includes('/jest-circus/')) {
-    testRunnerPath = require.resolve('./jest-circus');
+    testFrameworkFactory = (require('./circus') as typeof import("./circus")).default;
   } else if (projectConfig.testRunner.includes('/jest-jasmine2/')) {
-    testRunnerPath = require.resolve('./jasmine2');
+    testFrameworkFactory = (require('./jasmine2') as typeof import("./jasmine2")).default;
   } else {
     throw new Error('only circus or jasmine2 supported');
   }
 
-  const testFrameworkFactory = await transformer.requireAndTranspileModule<TestFrameworkFactory>(
-    testRunnerPath,
-  );
 
   const Runtime: typeof RuntimeClass = interopRequireDefault(
     projectConfig.runtime

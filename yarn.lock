@@ -1783,6 +1783,7 @@ __metadata:
     emittery: ^0.10.2
     graceful-fs: ^4.2.9
     is-generator-fn: ^2.0.0
+    jest-circus: ^29.0.0
     jest-config: ^29.0.0
     jest-docblock: ^29.0.0
     jest-environment-node: ^29.0.0
@@ -2231,6 +2232,33 @@ __metadata:
   languageName: node
   linkType: hard
 
+"jest-circus@npm:^29.0.0, jest-circus@npm:^29.0.2":
+  version: 29.0.2
+  resolution: "jest-circus@npm:29.0.2"
+  dependencies:
+    "@jest/environment": ^29.0.2
+    "@jest/expect": ^29.0.2
+    "@jest/test-result": ^29.0.2
+    "@jest/types": ^29.0.2
+    "@types/node": "*"
+    chalk: ^4.0.0
+    co: ^4.6.0
+    dedent: ^0.7.0
+    is-generator-fn: ^2.0.0
+    jest-each: ^29.0.2
+    jest-matcher-utils: ^29.0.2
+    jest-message-util: ^29.0.2
+    jest-runtime: ^29.0.2
+    jest-snapshot: ^29.0.2
+    jest-util: ^29.0.2
+    p-limit: ^3.1.0
+    pretty-format: ^29.0.2
+    slash: ^3.0.0
+    stack-utils: ^2.0.3
+  checksum: 334a74c067a8d42eb37f059a5279c58a2d10134530e4996c4d87d8bc7849bd1a141f683b6599735eac8fe30bee3ad18f2233881d0bf2363282a9f596c9f9abab
+  languageName: node
+  linkType: hard
+
 "jest-circus@npm:^29.0.1":
   version: 29.0.1
   resolution: "jest-circus@npm:29.0.1"
@@ -2255,33 +2283,6 @@ __metadata:
     slash: ^3.0.0
     stack-utils: ^2.0.3
   checksum: 9cdb10b8def60ee9419f7efdba22dc94544d3e150d0d3350c8085bc1dc9330abb586a8d2bd840915198a11064704c2cf22902ecfbe97c698b896c5a9dafa345e
-  languageName: node
-  linkType: hard
-
-"jest-circus@npm:^29.0.2":
-  version: 29.0.2
-  resolution: "jest-circus@npm:29.0.2"
-  dependencies:
-    "@jest/environment": ^29.0.2
-    "@jest/expect": ^29.0.2
-    "@jest/test-result": ^29.0.2
-    "@jest/types": ^29.0.2
-    "@types/node": "*"
-    chalk: ^4.0.0
-    co: ^4.6.0
-    dedent: ^0.7.0
-    is-generator-fn: ^2.0.0
-    jest-each: ^29.0.2
-    jest-matcher-utils: ^29.0.2
-    jest-message-util: ^29.0.2
-    jest-runtime: ^29.0.2
-    jest-snapshot: ^29.0.2
-    jest-util: ^29.0.2
-    p-limit: ^3.1.0
-    pretty-format: ^29.0.2
-    slash: ^3.0.0
-    stack-utils: ^2.0.3
-  checksum: 334a74c067a8d42eb37f059a5279c58a2d10134530e4996c4d87d8bc7849bd1a141f683b6599735eac8fe30bee3ad18f2233881d0bf2363282a9f596c9f9abab
   languageName: node
   linkType: hard
 

@@ -45,9 +45,9 @@ export type TestFrameworkFactory = (
   config: Config.ProjectConfig,
   environment: JestEnvironment,
   runtime: RuntimeType,
-  testPath?: string,
+  // testPath?: string,
   // sendMessageToJest?: TestFileEvent,
-) => TestFramework;
+) => Promise<TestFramework>;
 
 export type TestRunnerOptions = {
   serial: boolean;
