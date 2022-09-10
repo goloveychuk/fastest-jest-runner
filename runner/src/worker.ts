@@ -125,6 +125,7 @@ function loop(
         debugger;
         const isChild = childPid === 0;
         if (isChild) {
+          reader.closeFd()
           spinSnapshot(workerConfig, testEnv, payload).catch((err) => {
             console.error('err in spinSnapshot', err);
             //todo handle properly
@@ -143,6 +144,7 @@ function loop(
         const isChild = childPid === 0;
 
         if (isChild) {
+          reader.closeFd()
           __timing.time('fork', 'end');
           handleChild(__timing, testEnv, payload);
           return 'child';

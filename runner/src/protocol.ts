@@ -47,7 +47,10 @@ export function createSyncFifoReader<T>(fifo: Fifo) {
 
     return JSON.parse(dataBuf.toString('utf8'));
   };
-  return {read};
+  const closeFd = () => {
+    fs.closeSync(fd);
+  }
+  return {read, closeFd};
 }
 
 export async function createAsyncFifoWriter<T>(fifo: Fifo) {
