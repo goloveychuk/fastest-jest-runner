@@ -13,6 +13,7 @@ import type { Fifo } from './fifo-maker';
 import RuntimeMod from 'jest-runtime';
 import HasteMap from 'jest-haste-map';
 import { buildSnapshot } from './snapshots/build';
+import { createTimings, Timing } from './log';
 
 
 // console.log(process.argv[2]);
@@ -27,7 +28,7 @@ const runGc = async () => {
   await sleep(300); //waiting for gc??
 };
 
-function handleChild(testEnv: TestEnv, payload: WorkerInput.RunTest) {
+function handleChild(__timing: Timing, testEnv: TestEnv, payload: WorkerInput.RunTest) {
   let handled = false;
 
   const handle = (data: WorkerResponse.Response['testResult']) => {
@@ -36,15 +37,17 @@ function handleChild(testEnv: TestEnv, payload: WorkerInput.RunTest) {
       return;
     }
     handled = true;
-  
+    // __timing.time('handleTestRes', 'start');
     const resp: WorkerResponse.Response = {
       pid: process.pid,
       testResult: data,
     };
     console.log('writing to', payload.resultFifo.path);
+    // __timing.time('writeResult', 'start');
     fs.writeFileSync(payload.resultFifo.path, JSON.stringify(resp));
+    // __timing.time('writeResult', 'end');
     addon.sendThisProcOk();
-    // });
+    // __timing.time('handleTestRes', 'end');
   };
 
   process.on('unhandledRejection', (reason, _promise) => {
@@ -70,11 +73,18 @@ function handleChild(testEnv: TestEnv, payload: WorkerInput.RunTest) {
     handle(makeErrorResp('exited before result: ' + code));
   });
 
+  __timing.time('innerRunTest', 'start');
   testEnv
     .runTest(payload.testPath)
     .then(
-      (data) => handle({ type: 'result', data }),
-      (err) => handle(makeErrorResp(err)),
+      (data) => {
+        __timing.time('innerRunTest', 'end');
+        return handle({ type: 'result', data: __timing.enrich(data) });
+      },
+      (err) => {
+        // __timing.time('innerRunTest', 'end');
+        return handle(makeErrorResp(err));
+      },
     )
     .finally(() => {
       console.log('exiting');
@@ -125,14 +135,16 @@ function loop(
         }
       }
       case 'test': {
-        console.log('got test job', payload.testPath);
-        const childPid = addon.fork(payload.resultFifo.id);
+        const __timing = createTimings()
 
+        __timing.time('fork', 'start');
+        const childPid = addon.fork(payload.resultFifo.id);
         // const res = 0 ;
         const isChild = childPid === 0;
 
         if (isChild) {
-          handleChild(testEnv, payload);
+          __timing.time('fork', 'end');
+          handleChild(__timing, testEnv, payload);
           return 'child';
         } else {
           continue;

@@ -33,6 +33,7 @@ import type { SnapshotBuilderModule, SnapshotConfig } from './snapshots/types';
 import { replaceRootDirInPath } from 'jest-config';
 import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
+import {  createTimings } from './log';
 
 function setCleanupBeforeExit(clean: () => void) {
   let called = false;
@@ -301,10 +302,11 @@ class TestRunner extends EmittingTestRunner {
     });
 
     child.stdout!.on('data', (data) => {
-      console.log('stdout', data.toString('utf-8'));
+      console.log(data.toString('utf-8'));
     });
     child.stderr!.on('data', (data) => {
-      console.log('stderr', data.toString('utf-8'));
+      const chunk = data.toString('utf-8')
+      console.log(chunk)
     });
 
     child.send(workerConfig);
@@ -339,6 +341,9 @@ class TestRunner extends EmittingTestRunner {
     const initOrGetSnapshot = withCache(initSnapshot);
 
     const runTest = async (test: Test): Promise<TestResult> => {
+      const __timing = createTimings()
+
+      __timing.time('runTest', 'start')
       testsLeft.add(test.path);
       // return new Promise<TestResult>((resolve, reject) => {
       const snapshotName = await getSnapshotName(test);
@@ -349,27 +354,32 @@ class TestRunner extends EmittingTestRunner {
       testsById.set(resultFifo.id, test);
 
       console.log(`sent msg ${test.path}`);
-
+      
+      __timing.time('writeToFifo', 'start')
       await snapshotObj.writer.write({
         type: 'test',
         testPath: test.path,
         resultFifo,
       });
-
+      __timing.time('writeToFifo', 'end')
       // child.stdin!.uncork()
       // child.send([id, test.path]);
 
+      __timing.time('readTestResult', 'start')
       const resp = JSON.parse(
         await fs.promises.readFile(resultFifo.path, 'utf8'),
       ) as WorkerResponse.Response;
+      __timing.time('readTestResult', 'end')
       await fs.promises.unlink(resultFifo.path);
       testsLeft.delete(test.path);
       // process.kill(resp.pid, 'SIGKILL'); // killing zombies, better to wait for SIGCHLD
       //
+      __timing.time('runTest', 'end')
+
       if (resp.testResult.type === 'error') {
         throw resp.testResult.data;
       }
-      return resp.testResult.data;
+      return __timing.enrich(resp.testResult.data);
       // if (oneResolved) {
       //   setTimeout(() => {
       //     reject(new Error('timeout'));
@@ -433,6 +443,7 @@ class TestRunner extends EmittingTestRunner {
       console.log('after proc loop await');
       // if (testsLeft.size) {
       console.log('Tests left:', Array.from(testsLeft).join('\n'));
+
       // }
       // child.kill('SIGTERM');
     };
