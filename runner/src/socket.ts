@@ -18,6 +18,39 @@ const DELIMITER = '\n';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export async function createMultiConServer<T>(
+  socketPath: string,
+  onResp: (data: T) => void,
+) {
+  const server = net
+    .createServer((stream) => {
+      let wholeData = '';
+      stream.on('data', (msg) => {
+        wholeData += msg.toString();
+      });
+      stream.on('end', () => {
+        onResp(JSON.parse(wholeData));
+      });
+    })
+    .listen(socketPath);
+
+  return {
+    stop: () => {
+      server.close();
+    },
+  };
+}
+
+export async function sendRequest<T>(socketPath: string, d: T) {
+  return new Promise<void>((resolve) => {
+    const client = net.createConnection(socketPath, () => {
+    //   console.log('connected');
+      const str = JSON.stringify(d);
+      client.end(str, 'utf8', resolve);
+    });
+  });
+}
+
 export async function createServer<T>(socketPath: string) {
   // connec
   let counter = 0;

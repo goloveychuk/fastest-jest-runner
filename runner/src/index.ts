@@ -34,7 +34,7 @@ import { replaceRootDirInPath } from 'jest-config';
 import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
 import { createTimings } from './log';
-import { createServer } from './socket';
+import { createMultiConServer, createServer } from './socket';
 
 function setCleanupBeforeExit(clean: () => void) {
   let called = false;
@@ -230,14 +230,16 @@ class TestRunner extends EmittingTestRunner {
 
     const testsLeft = new Set<string>();
     const onProcExit: OnProcExit = (data) => {
-      const fifo = fifoMaker.getFifoById(data.id);
+      // const fifo = fifoMaker.getFifoById(data.id);
       const resp: WorkerResponse.Response = {
+        id: data.id,
         pid: data.pid,
         testResult: makeErrorResp(
           `Proc exited without response, status=${data.status}`,
         ),
       };
-      fs.writeFileSync(fifo.path, JSON.stringify(resp));
+      testsPromises.get(resp.id)!(resp)
+      // fs.writeFileSync(fifo.path, JSON.stringify(resp));
     };
 
     const procControlFifo = fifoMaker.makeFifo('proc_contrl');
@@ -311,7 +313,12 @@ class TestRunner extends EmittingTestRunner {
     });
 
     child.send(workerConfig);
+    const respsFifo = fifoMaker.makeFifo2('resp');
 
+    let testsPromises = new Map<number, (d: WorkerResponse.Response) => void>()
+    const respServer = await createMultiConServer<WorkerResponse.Response>(respsFifo.path, (res=> {
+      testsPromises.get(res.id)!(res);
+    }));
 
     const concurrency = options.serial ? 1 : this._globalConfig.maxWorkers;
     // let concurrency = 25;
@@ -346,6 +353,7 @@ class TestRunner extends EmittingTestRunner {
     const initOrGetSnapshot = withCache(initSnapshot);
 
     const runTest = async (test: Test): Promise<TestResult> => {
+      
       const __timing = createTimings();
 
       __timing.time('runTest', 'start');
@@ -354,8 +362,11 @@ class TestRunner extends EmittingTestRunner {
       const snapshotName = await getSnapshotName(test);
 
       const snapshotObj = await initOrGetSnapshot(snapshotName);
-
-      const resultFifo = fifoMaker.makeFifo('result');
+      
+      const resultFifo = fifoMaker.makeFifo2('result');
+      const resPromise = new Promise<WorkerResponse.Response>((resolve) => {
+        testsPromises.set(resultFifo.id, resolve);
+      })
       testsById.set(resultFifo.id, test);
 
       console.log(`sent msg ${test.path}`);
@@ -364,6 +375,7 @@ class TestRunner extends EmittingTestRunner {
       await snapshotObj.writer.write({
         type: 'test',
         testPath: test.path,
+        resPath: respsFifo.path,
         resultFifo,
       });
       __timing.time('writeToFifo', 'end');
@@ -371,11 +383,9 @@ class TestRunner extends EmittingTestRunner {
       // child.send([id, test.path]);
 
       __timing.time('readTestResult', 'start');
-      const resp = JSON.parse(
-        await fs.promises.readFile(resultFifo.path, 'utf8'),
-      ) as WorkerResponse.Response;
+      const resp = await resPromise
       __timing.time('readTestResult', 'end');
-      await fs.promises.unlink(resultFifo.path);
+      // await fs.promises.unlink(resultFifo.path);
       testsLeft.delete(test.path);
       // process.kill(resp.pid, 'SIGKILL'); // killing zombies, better to wait for SIGCHLD
       //
@@ -419,6 +429,7 @@ class TestRunner extends EmittingTestRunner {
     const cleanup = async () => {
       await Promise.all(cleanups.map((cl) => cl()));
       await workerWriter.stop()
+      await respServer.stop()
       await fs.promises.rm(rootDir, { recursive: true });
       console.log('before proc loop');
       const timer = setTimeout(() => {

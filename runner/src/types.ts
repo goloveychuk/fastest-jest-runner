@@ -181,6 +181,7 @@ export declare namespace WorkerInput {
   export type RunTest = {
     type: 'test';
     testPath: string;
+    resPath: string
     resultFifo: Fifo;
   };
 
@@ -211,6 +212,7 @@ export declare namespace WorkerResponse {
   };
 
   export type Response = {
+    id: number
     pid: number;
     testResult: TestResultResp | ErrorResp;
   };

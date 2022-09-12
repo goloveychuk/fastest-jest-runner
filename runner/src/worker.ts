@@ -14,7 +14,7 @@ import RuntimeMod from 'jest-runtime';
 import HasteMap from 'jest-haste-map';
 import { buildSnapshot } from './snapshots/build';
 import { createTimings, Timing } from './log';
-import { connectToServer } from './socket';
+import { connectToServer, sendRequest } from './socket';
 
 
 // console.log(process.argv[2]);
@@ -32,7 +32,7 @@ const runGc = async () => {
 function handleChild(__timing: Timing, testEnv: TestEnv, payload: WorkerInput.RunTest) {
   let handled = false;
 
-  const handle = (data: WorkerResponse.Response['testResult']) => {
+  const handle = async (data: WorkerResponse.Response['testResult']) => {
     if (handled) {
       console.warn('already handled, fix me');
       return;
@@ -40,12 +40,14 @@ function handleChild(__timing: Timing, testEnv: TestEnv, payload: WorkerInput.Ru
     handled = true;
     // __timing.time('handleTestRes', 'start');
     const resp: WorkerResponse.Response = {
+      id: payload.resultFifo.id,
       pid: process.pid,
       testResult: data,
     };
     console.log('writing to', payload.resultFifo.path);
     // __timing.time('writeResult', 'start');
-    fs.writeFileSync(payload.resultFifo.path, JSON.stringify(resp));
+    // fs.writeFileSync(payload.resultFifo.path, JSON.stringify(resp));
+    await sendRequest(payload.resPath, resp)
     // __timing.time('writeResult', 'end');
     addon.sendThisProcOk();
     // __timing.time('handleTestRes', 'end');
