@@ -55,6 +55,7 @@ void signal_handler(uv_signal_t *handle, int signum)
 
 Value subscribe_child(const CallbackInfo &info)
 {
+  return;
   //   // using namespace std::placeholders;
   Function callback = info[0].As<Function>();
 

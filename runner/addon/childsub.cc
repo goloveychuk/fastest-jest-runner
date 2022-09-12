@@ -60,6 +60,7 @@ void child_handler(int sign)
 
 void subscribe_child(const CallbackInfo &info)
 {
+  return;
   if (sub_called) {
     throw std::runtime_error("subscribe_child can only be called once");
   }

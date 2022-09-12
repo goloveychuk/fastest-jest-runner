@@ -42,7 +42,7 @@ Value fork_fn(const CallbackInfo &info)
 
   if (pid == 0)
   { // im children
-    // setsid(); 30 s faster??
+    // setsid(); // 30 s faster??
     uv_loop_t *loop;
     if (napi_get_uv_event_loop(info.Env(), &loop))
     {
@@ -104,6 +104,22 @@ void send_this_proc_ok(const CallbackInfo &info)
   write_proc_data(ProcMsgTypes::proc_ok, getpid(), 0);
 }
 
+void close_fd(const CallbackInfo &info) {
+  int fd = info[0].As<Number>();
+  close(fd);
+}
+
+Value pipefd(const CallbackInfo &info) {
+   int fd1[2];
+    if (pipe(fd1) == -1) {
+        throw std::runtime_error("pipe failed");
+    }
+    Object obj = Object::New(info.Env());
+    obj.Set("read", fd1[0]);
+    obj.Set("write", fd1[1]);
+    return obj;
+}
+
 Object Init(Env env, Object exports)
 {
   exports["fork"] = Function::New(
@@ -112,12 +128,16 @@ Object Init(Env env, Object exports)
       env, get_my_pid, std::string("get_my_pid"));
   exports["subscribe_child"] = Function::New(
       env, subscribe_child, std::string("subscribe_child"));
+    exports["close"] = Function::New(
+      env, close_fd, std::string("close"));
   exports["make_fifo"] = Function::New(
       env, make_fifo, std::string("make_fifo"));
   exports["send_this_proc_ok"] = Function::New(
       env, send_this_proc_ok, std::string("send_this_proc_ok"));
   exports["wait_for_all_children"] = Function::New(
       env, wait_for_all_children, std::string("wait_for_all_children"));
+    exports["pipe"] = Function::New(
+      env, pipefd, std::string("pipe"));
   return exports;
 }
 

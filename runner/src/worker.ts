@@ -7,7 +7,7 @@ import {
   WorkerInput,
   WorkerResponse,
 } from './types';
-import { createSyncFifoReader } from './protocol';
+import { createAsyncFifoReader, createSyncFifoReader } from './protocol';
 import * as addon from './addon';
 import type { Fifo } from './fifo-maker';
 import RuntimeMod from 'jest-runtime';
@@ -99,7 +99,7 @@ async function spinSnapshot(
 ) {
   await buildSnapshot(workerConfig.snapshotConfig, testEnv, payload.name);
   await runGc();
-  if (loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
+  if (await loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
     console.log('snapshot loop stopped: ' + payload.name);
     addon.sendThisProcOk();
     addon.waitForAllChildren();
@@ -107,22 +107,38 @@ async function spinSnapshot(
   }
 }
 
-function loop(
+async function loop(
   workerConfig: WorkerConfig,
   testEnv: TestEnv,
   fifo: Fifo,
-): 'child' | 'main' {
-  const reader = createSyncFifoReader<WorkerInput.Input>(fifo);
+): Promise<'child' | 'main' | 'asd'> {
 
-  while (true) {
-    const payload = reader.read();
+  const reader = await createAsyncFifoReader<WorkerInput.Input>(fifo);
+  let loopStart = Date.now()
+  let anything = false
+  loop: while (true) {
+
+    // console.error('!!loop!!', Math.round((Date.now() - loopStart)/1000))
+    // const was = Date.now();
+    if (fifo.id == 0) {
+      // console.error('loop waiting', fifo.id, process.pid)
+    }
+    const payload = await reader.read();
+    // console.error('got msg', fifo.id, process.pid, payload.type)
+    // if (fifo.id == 0) {
+    //   console.error('loop read', fifo.id)
+    // }
+    loopStart = Date.now()
+    // console.error('!!reader.read()!!', Math.round((Date.now() - was)/1000))
     switch (payload.type) {
       case 'stop': {
         return 'main';
       }
       case 'spinSnapshot': {
         const childPid = addon.fork(payload.snapFifo.id);
-        debugger;
+        // debugger;
+
+        console.error('fork!spinSnapshot!!!', process.pid)
         const isChild = childPid === 0;
         if (isChild) {
           reader.closeFd()
@@ -132,7 +148,17 @@ function loop(
           });
           return 'child';
         } else {
-          continue;
+          // reader.closeFd()
+          // anything = true
+          console.error('subscribed!!!!!!!')
+          // process.on('message', d => {
+          //   console.error(d, process.pid)
+          // })
+          setInterval(() => {
+            console.error('tick')
+          }, 1000)
+          continue loop;
+          // return 'asd'
         }
       }
       case 'test': {
@@ -149,12 +175,16 @@ function loop(
           handleChild(__timing, testEnv, payload);
           return 'child';
         } else {
-          continue;
+          continue loop;
         }
       }
+      case 'ping': {
+        console.error('!!pong', Math.round((Date.now() - payload.time)/1000))
+        continue loop;
+      }
       default: {
-        // @ts-expect-error
-        throw new Error('bad payload type: ' + payload.type);
+
+        // throw new Error('bad payload type: ' + payload.type);
       }
     }
   }
@@ -184,7 +214,8 @@ function run(workerConfig: WorkerConfig) {
       console.log('before loop');
       addon.startProcControl(workerConfig.procControlFifo.path);
 
-      if (loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
+      
+      if (await loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
         console.log('worker loop stopped');
         addon.waitForAllChildren();
         process.exit(0);

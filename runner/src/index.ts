@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import Emittery = require('emittery');
 import pLimit = require('p-limit');
+import * as addon from './addon'
 import * as os from 'os';
 import type {
   SerializableError,
@@ -11,7 +12,7 @@ import type {
   TestResult,
 } from '@jest/test-result';
 import type { TestWatcher } from 'jest-watcher';
-import inspector from 'inspector';
+// import inspector from 'inspector';
 import * as docblock from 'jest-docblock';
 
 import {
@@ -101,9 +102,9 @@ class TestRunner extends EmittingTestRunner {
     //   return false;
     // });
 
-    if (inspector.url()) {
-      return this.runDebug(tests, watcher);
-    }
+    // if (inspector.url()) {
+    //   return this.runDebug(tests, watcher);
+    // }
 
     return this.runSnapshotsTests(tests, watcher, options);
   }
@@ -257,6 +258,8 @@ class TestRunner extends EmittingTestRunner {
     // const nodePath = '/home/badim/github/node/out/Release/node';
     // const snapshotConfig = await collectDeps(tests, config);
 
+    const fifo2 = fifoMaker.makeFifo('worker2');
+
     const workerConfig: WorkerConfig = {
       context: this._context,
       projectConfig,
@@ -265,11 +268,14 @@ class TestRunner extends EmittingTestRunner {
       workerFifo,
       procControlFifo,
       serializableModuleMap,
+      fifo2,
     };
 
     const was = Date.now();
     // debugger
     const currentArgv = process.execArgv;
+
+    const workerPipe = addon.pipe()
 
     const child = fork(
       // 'node',
@@ -300,24 +306,42 @@ class TestRunner extends EmittingTestRunner {
       console.log('Tests left:', Array.from(testsLeft).join('\n'));
       // }
     });
-
     child.stdout!.on('data', (data) => {
       console.log(data.toString('utf-8'));
     });
     child.stderr!.on('data', (data) => {
       const chunk = data.toString('utf-8')
-      console.log(chunk)
+      console.error(chunk)
     });
-
+    addon.close(workerPipe.read)
+    workerConfig.workerFifo.pipe = workerPipe;
+    
     child.send(workerConfig);
 
     const concurrency = options.serial ? 1 : this._globalConfig.maxWorkers;
     // let concurrency = 25;
     console.log({ concurrency });
 
+    console.error(workerPipe)
+
     const workerWriter = await createAsyncFifoWriter<WorkerInput.Input>(
       workerFifo,
     );
+    let x = 1
+
+    setInterval(() => {
+      console.error('ping');
+      workerWriter.write({
+        type: 'ping',
+        time: Date.now(),
+      }).then(() => {
+        // console.error('ping written')
+      }).catch(() => {
+
+      });
+
+      child.send('--ping ' + x++)
+    }, 1000)
 
     const testsById = new Map<number, Test>();
     const cleanups: Array<() => Promise<void>> = [];
@@ -332,6 +356,7 @@ class TestRunner extends EmittingTestRunner {
         name,
         snapFifo,
       });
+      
       cleanups.push(async () => {
         await writer.write({ type: 'stop' });
       });
@@ -356,12 +381,14 @@ class TestRunner extends EmittingTestRunner {
       console.log(`sent msg ${test.path}`);
       
       __timing.time('writeToFifo', 'start')
+      const was = Date.now();
       await snapshotObj.writer.write({
         type: 'test',
         testPath: test.path,
         resultFifo,
       });
       __timing.time('writeToFifo', 'end')
+      console.error('!!write!!', Math.round((Date.now() - was)/1000))
       // child.stdin!.uncork()
       // child.send([id, test.path]);
 
@@ -379,6 +406,7 @@ class TestRunner extends EmittingTestRunner {
       if (resp.testResult.type === 'error') {
         throw resp.testResult.data;
       }
+      resp.testResult.data.console = undefined
       return __timing.enrich(resp.testResult.data);
       // if (oneResolved) {
       //   setTimeout(() => {

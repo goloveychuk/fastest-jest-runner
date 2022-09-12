@@ -4,6 +4,7 @@ import * as addon from './addon';
 export interface Fifo {
   path: string;
   id: number;
+  pipe?: {read: number, write: number}
 }
 
 export class FifoMaker {
@@ -22,6 +23,7 @@ export class FifoMaker {
 
   makeFifo(desc: string): Fifo {
     const id = this.curId++;
+    console.error('fifo', desc, id)
     const p = path.join(this.baseDir, `pipe_${desc}_${id}`);
     addon.make_fifo(p);
     const fifo: Fifo  = {path: p, id}; 
