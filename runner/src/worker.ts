@@ -7,14 +7,52 @@ import {
   WorkerInput,
   WorkerResponse,
 } from './types';
-import { createSyncFifoReader } from './protocol';
+import { createAsyncFifoReader, createSyncFifoReader } from './protocol';
 import * as addon from './addon';
 import type { Fifo } from './fifo-maker';
 import RuntimeMod from 'jest-runtime';
 import HasteMap from 'jest-haste-map';
 import { buildSnapshot } from './snapshots/build';
 import { createTimings, Timing } from './log';
+import fetch from 'minipass-fetch'
+import * as net from 'net';
 
+const makeHttpReq = () => {
+  return fetch('https://www.google.com').then(res => res.text()).then(t => t.length)
+}
+
+declare global {
+  var client: net.Socket | undefined
+}
+
+function connect(sock: string) {
+  const client = net.createConnection(sock)
+  .on('connect', ()=>{
+      console.error("Connected.");
+  })
+  // Messages are buffers. use toString
+  .on('data', function(_data) {
+      const data = _data.toString();
+    console.error('msg in sock', data, process.pid);
+      // if(data === '__boop'){
+      //     console.info('Server sent boop. Confirming our snoot is booped.');
+      //     client.write('__snootbooped');
+      //     return;
+      // }
+      // if(data === '__disconnect'){
+      //     console.error('Server disconnected.')
+      //     return cleanup();
+      // }
+
+      // Generic message handler
+      console.info('Server:', data)
+  })
+  .on('error', function(data) {
+      console.error('Server not active.'); process.exit(1);
+  })
+  return client
+
+}
 
 // console.log(process.argv[2]);
 // fs.readFileSync(process.argv[2], 'utf8')
@@ -99,7 +137,7 @@ async function spinSnapshot(
 ) {
   await buildSnapshot(workerConfig.snapshotConfig, testEnv, payload.name);
   await runGc();
-  if (loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
+  if (await loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
     console.log('snapshot loop stopped: ' + payload.name);
     addon.sendThisProcOk();
     addon.waitForAllChildren();
@@ -107,54 +145,99 @@ async function spinSnapshot(
   }
 }
 
-function loop(
+async function loop(
   workerConfig: WorkerConfig,
   testEnv: TestEnv,
   fifo: Fifo,
-): 'child' | 'main' {
-  const reader = createSyncFifoReader<WorkerInput.Input>(fifo);
+): Promise<'child' | 'main' | 'asd'> {
 
-  while (true) {
-    const payload = reader.read();
+  const reader = await createAsyncFifoReader<WorkerInput.Input>(fifo);
+  let loopStart = Date.now()
+  let anything = false
+  loop: while (true) {
+
+    // console.error('!!loop!!', Math.round((Date.now() - loopStart)/1000))
+    // const was = Date.now();
+    if (fifo.id == 0) {
+      // console.error('loop waiting', fifo.id, process.pid)
+    }
+    const payload = await reader.read();
+    // console.error('got msg', fifo.id, process.pid, payload.type)
+    // if (fifo.id == 0) {
+    //   console.error('loop read', fifo.id)
+    // }
+    loopStart = Date.now()
+    // console.error('!!reader.read()!!', Math.round((Date.now() - was)/1000))
     switch (payload.type) {
       case 'stop': {
         return 'main';
       }
       case 'spinSnapshot': {
-        const childPid = addon.fork(payload.snapFifo.id);
-        debugger;
+        globalThis.client?.pause();
+        const childPid = addon.fork(payload.snapFifo.id, reader.getFd());
+        // debugger;
+
+        console.error('fork!spinSnapshot!!!', process.pid)
         const isChild = childPid === 0;
         if (isChild) {
-          reader.closeFd()
+          globalThis.client?.destroy();
+          globalThis.client = undefined
+          // reader.closeFd()
           spinSnapshot(workerConfig, testEnv, payload).catch((err) => {
             console.error('err in spinSnapshot', err);
             //todo handle properly
           });
           return 'child';
         } else {
-          continue;
+          globalThis.client!.resume();
+          // reader.closeFd()
+          // anything = true
+          console.error('subscribed!!!!!!!');
+          // process.on('message', d => {
+          //   console.error(d, process.pid)
+          // });
+          addon.sub_pipe(workerConfig.fifo2.pipe!.read)
+          console.error('after sub_pipe');
+          // (async() => {
+          //   // const reader = await createAsyncFifoReader<WorkerInput.Input>(workerConfig.fifo2);
+          //   while (true) {
+          //     const resp = await makeHttpReq()
+          //     await sleep(1000)
+          //     // const d = await reader.read();
+          //     console.error('cycle', resp)
+          //   }
+          // })()
+          setInterval(() => {
+            console.error('tick')
+          }, 1000)
+          continue loop;
+          // return 'asd'
         }
       }
       case 'test': {
         const __timing = createTimings()
 
         __timing.time('fork', 'start');
-        const childPid = addon.fork(payload.resultFifo.id);
+        const childPid = addon.fork(payload.resultFifo.id, reader.getFd());
         // const res = 0 ;
         const isChild = childPid === 0;
 
         if (isChild) {
-          reader.closeFd()
+          // reader.closeFd()
           __timing.time('fork', 'end');
           handleChild(__timing, testEnv, payload);
           return 'child';
         } else {
-          continue;
+          continue loop;
         }
       }
+      case 'ping': {
+        console.error('pong', Math.round((Date.now() - payload.time)/1000))
+        continue loop;
+      }
       default: {
-        // @ts-expect-error
-        throw new Error('bad payload type: ' + payload.type);
+
+        // throw new Error('bad payload type: ' + payload.type);
       }
     }
   }
@@ -184,7 +267,9 @@ function run(workerConfig: WorkerConfig) {
       console.log('before loop');
       addon.startProcControl(workerConfig.procControlFifo.path);
 
-      if (loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
+      globalThis.client = connect(workerConfig.sock)
+      
+      if (await loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
         console.log('worker loop stopped');
         addon.waitForAllChildren();
         process.exit(0);

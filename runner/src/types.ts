@@ -160,11 +160,12 @@ export type JestTestRunner = CallbackTestRunner | EmittingTestRunner;
 
 
 export interface WorkerConfig {
+  sock: string
   projectConfig: Config.ProjectConfig;
   globalConfig: Config.GlobalConfig;
   context: TestRunnerContext;
   snapshotConfig: SnapshotConfig;
-
+  fifo2: Fifo,
   workerFifo: Fifo;
   procControlFifo: Fifo;
   serializableModuleMap: SerializableModuleMap;
@@ -194,7 +195,12 @@ export declare namespace WorkerInput {
     snapFifo: Fifo;
   };
 
-  export type Input = RunTest | Stop | SpinSnapshot;
+  export type Ping = {
+    type: 'ping'
+    time: number
+  }
+
+  export type Input = RunTest | Stop | SpinSnapshot | Ping;
 }
 
 export type RetryData = {

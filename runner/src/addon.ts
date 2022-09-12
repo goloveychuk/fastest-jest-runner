@@ -1,9 +1,9 @@
 const bindings = require('../build/Release/addon');
-const inspector = require('inspector') as typeof import('inspector');
 
-function fork(id: number): number {
+
+function fork(id: number, closeFd: number): number {
         // inspector.close()
-    const pid = bindings.fork(id);
+    const pid = bindings.fork(id,closeFd);
     if(pid === 0) { //children
         // inspector.close()
         // inspector.Session
@@ -29,15 +29,27 @@ function make_fifo(path: string) {
 }
 
 function startProcControl(path: string) {
-    bindings.subscribe_child(path)
+    // bindings.subscribe_child(path)
 }
 
 function sendThisProcOk() {
-    bindings.send_this_proc_ok()
+    // bindings.send_this_proc_ok()
 }
 
 function waitForAllChildren(){ 
-    bindings.wait_for_all_children()
+    // bindings.wait_for_all_children()
 }
 
-export {fork, startProcControl, make_fifo, sendThisProcOk, waitForAllChildren}
+function close(fd: number) {
+    return bindings.close(fd)
+}
+
+function sub_pipe(fd: number) {
+    return bindings.sub_pipe(fd)
+}
+
+function pipe(): {read: number, write: number} {
+    return bindings.pipe()
+}
+
+export {fork, close, startProcControl, make_fifo, sendThisProcOk, waitForAllChildren, pipe, sub_pipe}

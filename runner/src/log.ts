@@ -50,5 +50,5 @@ export const createTimings = () => {
         return res
     }
 
-    return {time, enrich}
+    return {time, enrich, raw: () => allTimings}
 }
