@@ -150,10 +150,17 @@ async function loop(
         } else {
           // reader.closeFd()
           // anything = true
-          console.error('subscribed!!!!!!!')
-          // process.on('message', d => {
-          //   console.error(d, process.pid)
-          // })
+          console.error('subscribed!!!!!!!');
+          process.on('message', d => {
+            console.error(d, process.pid)
+          });
+          (async() => {
+            const reader = await createAsyncFifoReader<WorkerInput.Input>(workerConfig.fifo2);
+            while (true) {
+              const d = await reader.read();
+              console.error('cycle', d.type)
+            }
+          })()
           setInterval(() => {
             console.error('tick')
           }, 1000)

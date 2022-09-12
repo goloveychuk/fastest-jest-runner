@@ -329,8 +329,17 @@ class TestRunner extends EmittingTestRunner {
     );
     let x = 1
 
+    const workerWriter2 = await createAsyncFifoWriter<WorkerInput.Input>(
+      fifo2,
+    );
     setInterval(() => {
       console.error('ping');
+
+      workerWriter2.write({
+        type: 'ping',
+        time: Date.now(),
+      })
+
       workerWriter.write({
         type: 'ping',
         time: Date.now(),
