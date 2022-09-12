@@ -68,7 +68,10 @@ export async function createAsyncFifoReader<T>(fifo: Fifo) {
     addon.close(fd)
     return 
   };
-  return { read, closeFd };
+  const getFd = () => {
+    return fd
+  }
+  return { read, closeFd, getFd };
 }
 
 export function createSyncFifoReader<T>(fifo: Fifo) {

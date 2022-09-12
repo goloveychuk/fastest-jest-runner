@@ -36,6 +36,61 @@ import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
 import {  createTimings } from './log';
 
+import * as net from 'net'
+
+function createServer(socket: string){
+  console.error('Creating server.');
+  var server = net.createServer(function(stream) {
+      console.error('Connection acknowledged.');
+
+      // Store all connections so we can terminate them if the server closes.
+      // An object is better than an array for these.
+      var self = Date.now();
+      // connections[self] = (stream);
+      // stream.on('end', function() {
+      //     console.error('Client disconnected.');
+      //     delete connections[self];
+      // });
+
+      // Messages are buffers. use toString
+      stream.on('data', function(_msg) {
+          // const msg = _msg.toString();
+          // if(msg === '__snootbooped'){
+          //     console.error("Client's snoot confirmed booped.");
+          //     return;
+          // }
+
+          // console.error('Client:', msg);
+
+          // if(msg === 'foo'){
+          //     stream.write('bar');
+          // }
+
+          // if(msg === 'baz'){
+          //     stream.write('qux');
+          // }
+
+          // if(msg === 'here come dat boi'){
+          //     stream.write('Kill yourself.');
+          // }
+      });
+  })
+  .listen(socket)
+  .on('connection', function(socket){
+      console.error('Client connected.');
+      console.error('Sending boop.');
+      socket.write('__boop');
+      let n = 0
+      setInterval(() => {
+        socket.write('ping'+n++)
+      }, 1000)
+      //console.error(Object.keys(socket));
+  })
+  ;
+  return server;
+}
+
+
 function setCleanupBeforeExit(clean: () => void) {
   let called = false;
   function exitHandler(
@@ -259,8 +314,13 @@ class TestRunner extends EmittingTestRunner {
     // const snapshotConfig = await collectDeps(tests, config);
 
     const fifo2 = fifoMaker.makeFifo('worker2');
+    fifo2.pipe = addon.pipe();
+
+    const sock = path.join(rootDir, 'server.sock');
+    createServer(sock)
 
     const workerConfig: WorkerConfig = {
+      sock,
       context: this._context,
       projectConfig,
       globalConfig: this._globalConfig,
@@ -333,7 +393,7 @@ class TestRunner extends EmittingTestRunner {
       fifo2,
     );
     setInterval(() => {
-      console.error('ping');
+      // console.error('ping');
 
       workerWriter2.write({
         type: 'ping',

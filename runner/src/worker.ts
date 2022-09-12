@@ -14,7 +14,41 @@ import RuntimeMod from 'jest-runtime';
 import HasteMap from 'jest-haste-map';
 import { buildSnapshot } from './snapshots/build';
 import { createTimings, Timing } from './log';
+import fetch from 'minipass-fetch'
+import * as net from 'net';
 
+const makeHttpReq = () => {
+  return fetch('https://www.google.com').then(res => res.text()).then(t => t.length)
+}
+
+function connect(sock: string) {
+  const client = net.createConnection(sock)
+  .on('connect', ()=>{
+      console.error("Connected.");
+  })
+  // Messages are buffers. use toString
+  .on('data', function(_data) {
+      const data = _data.toString();
+    console.error('msg in sock', data)
+      // if(data === '__boop'){
+      //     console.info('Server sent boop. Confirming our snoot is booped.');
+      //     client.write('__snootbooped');
+      //     return;
+      // }
+      // if(data === '__disconnect'){
+      //     console.error('Server disconnected.')
+      //     return cleanup();
+      // }
+
+      // Generic message handler
+      console.info('Server:', data)
+  })
+  .on('error', function(data) {
+      console.error('Server not active.'); process.exit(1);
+  })
+  ;
+
+}
 
 // console.log(process.argv[2]);
 // fs.readFileSync(process.argv[2], 'utf8')
@@ -135,13 +169,13 @@ async function loop(
         return 'main';
       }
       case 'spinSnapshot': {
-        const childPid = addon.fork(payload.snapFifo.id);
+        const childPid = addon.fork(payload.snapFifo.id, reader.getFd());
         // debugger;
 
         console.error('fork!spinSnapshot!!!', process.pid)
         const isChild = childPid === 0;
         if (isChild) {
-          reader.closeFd()
+          // reader.closeFd()
           spinSnapshot(workerConfig, testEnv, payload).catch((err) => {
             console.error('err in spinSnapshot', err);
             //todo handle properly
@@ -151,16 +185,21 @@ async function loop(
           // reader.closeFd()
           // anything = true
           console.error('subscribed!!!!!!!');
-          process.on('message', d => {
-            console.error(d, process.pid)
-          });
-          (async() => {
-            const reader = await createAsyncFifoReader<WorkerInput.Input>(workerConfig.fifo2);
-            while (true) {
-              const d = await reader.read();
-              console.error('cycle', d.type)
-            }
-          })()
+          // process.on('message', d => {
+          //   console.error(d, process.pid)
+          // });
+          addon.sub_pipe(workerConfig.fifo2.pipe!.read)
+          console.error('after sub_pipe');
+          connect(workerConfig.sock)
+          // (async() => {
+          //   // const reader = await createAsyncFifoReader<WorkerInput.Input>(workerConfig.fifo2);
+          //   while (true) {
+          //     const resp = await makeHttpReq()
+          //     await sleep(1000)
+          //     // const d = await reader.read();
+          //     console.error('cycle', resp)
+          //   }
+          // })()
           setInterval(() => {
             console.error('tick')
           }, 1000)
@@ -172,12 +211,12 @@ async function loop(
         const __timing = createTimings()
 
         __timing.time('fork', 'start');
-        const childPid = addon.fork(payload.resultFifo.id);
+        const childPid = addon.fork(payload.resultFifo.id, reader.getFd());
         // const res = 0 ;
         const isChild = childPid === 0;
 
         if (isChild) {
-          reader.closeFd()
+          // reader.closeFd()
           __timing.time('fork', 'end');
           handleChild(__timing, testEnv, payload);
           return 'child';
@@ -186,7 +225,7 @@ async function loop(
         }
       }
       case 'ping': {
-        console.error('!!pong', Math.round((Date.now() - payload.time)/1000))
+        console.error('pong', Math.round((Date.now() - payload.time)/1000))
         continue loop;
       }
       default: {

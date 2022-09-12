@@ -1,9 +1,9 @@
 const bindings = require('../build/Release/addon');
 
 
-function fork(id: number): number {
+function fork(id: number, closeFd: number): number {
         // inspector.close()
-    const pid = bindings.fork(id);
+    const pid = bindings.fork(id,closeFd);
     if(pid === 0) { //children
         // inspector.close()
         // inspector.Session
@@ -44,8 +44,12 @@ function close(fd: number) {
     return bindings.close(fd)
 }
 
+function sub_pipe(fd: number) {
+    return bindings.sub_pipe(fd)
+}
+
 function pipe(): {read: number, write: number} {
     return bindings.pipe()
 }
 
-export {fork, close, startProcControl, make_fifo, sendThisProcOk, waitForAllChildren, pipe}
+export {fork, close, startProcControl, make_fifo, sendThisProcOk, waitForAllChildren, pipe, sub_pipe}

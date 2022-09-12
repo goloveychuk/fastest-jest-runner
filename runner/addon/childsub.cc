@@ -30,11 +30,12 @@ int write_proc_data(int arg1, int arg2, int arg3)
   {
     data[i] = htonl(data[i]);
   }
-  int written = write(fd, data, SIZE_BYTES);
-  if (written<0) {
-    throw std::runtime_error("write to fifo failed");
-  }
-  return written;
+  // int written = write(fd, data, SIZE_BYTES);
+  // if (written<0) {
+  //   throw std::runtime_error("write to fifo failed");
+  // }
+  return 0;
+  // return written;
 }
 
 void child_handler(int sign)

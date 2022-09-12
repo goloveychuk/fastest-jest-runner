@@ -160,6 +160,7 @@ export type JestTestRunner = CallbackTestRunner | EmittingTestRunner;
 
 
 export interface WorkerConfig {
+  sock: string
   projectConfig: Config.ProjectConfig;
   globalConfig: Config.GlobalConfig;
   context: TestRunnerContext;
