@@ -28,4 +28,12 @@ export class FifoMaker {
     this.allFifos.set(id, fifo)
     return fifo
   }
+  makeFifo2(desc: string): Fifo {
+    const id = this.curId++;
+    const p = path.join(this.baseDir, `pipe_${desc}_${id}`);
+    // addon.make_fifo(p);
+    const fifo: Fifo  = {path: p, id}; 
+    this.allFifos.set(id, fifo)
+    return fifo
+  }
 }

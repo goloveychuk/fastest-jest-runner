@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 rm -rf gen
 mkdir gen
 for i in {1..499}; do

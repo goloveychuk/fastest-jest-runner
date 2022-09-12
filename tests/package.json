@@ -1,7 +1,8 @@
 {
     "private": true,
     "scripts": {
-        "test": "node ./runTests.js"
+        "test": "node ./runTests.js",
+        "benchmarks": "node ./runBenchmarks.js"
     },
     "devDependencies": {
         "fastest-jest-runner": "*",

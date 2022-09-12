@@ -33,7 +33,8 @@ import type { SnapshotBuilderModule, SnapshotConfig } from './snapshots/types';
 import { replaceRootDirInPath } from 'jest-config';
 import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
-import {  createTimings } from './log';
+import { createTimings } from './log';
+import { createServer } from './socket';
 
 function setCleanupBeforeExit(clean: () => void) {
   let called = false;
@@ -108,8 +109,6 @@ class TestRunner extends EmittingTestRunner {
     return this.runSnapshotsTests(tests, watcher, options);
   }
 
-
-
   async runDebug(tests: Array<Test>, watcher: TestWatcher) {
     if (tests.length !== 1) {
       throw new Error('Debug is supported for 1 test only');
@@ -134,10 +133,7 @@ class TestRunner extends EmittingTestRunner {
       resolver,
     });
 
-
-    const snapshotName = await getSnapshotName(
-      test
-    );
+    const snapshotName = await getSnapshotName(test);
 
     await this.#eventEmitter.emit('test-file-start', [test]);
 
@@ -156,9 +152,9 @@ class TestRunner extends EmittingTestRunner {
   }
 
   async getCommons(projectConfig: Config.ProjectConfig) {
-    const fastestRunnerConfig = normalizeRunnerConfig(projectConfig.globals[
-      'fastest-jest-runner'
-    ] as any)
+    const fastestRunnerConfig = normalizeRunnerConfig(
+      projectConfig.globals['fastest-jest-runner'] as any,
+    );
 
     const snapshotPath = replaceRootDirInPath(
       projectConfig.rootDir,
@@ -179,10 +175,14 @@ class TestRunner extends EmittingTestRunner {
 
     const validateSnapshotName = (name: string): string => {
       if (snapshotBuilder.snapshots[name]) {
-        return name
+        return name;
       }
-      throw new Error(`Snapshot "${name}" not found, available snapshots: ${Object.keys(snapshotBuilder.snapshots).join(', ')}`);
-    }
+      throw new Error(
+        `Snapshot "${name}" not found, available snapshots: ${Object.keys(
+          snapshotBuilder.snapshots,
+        ).join(', ')}`,
+      );
+    };
 
     const getSnapshotName = async (test: Test) => {
       const testSource = await fs.promises.readFile(test.path, 'utf-8');
@@ -200,11 +200,11 @@ class TestRunner extends EmittingTestRunner {
       }
       const snapshotName = await snapshotBuilder.getSnapshot({
         testPath: test.path,
-        docblockPragmas
+        docblockPragmas,
       });
 
-      return validateSnapshotName(snapshotName)
-    }
+      return validateSnapshotName(snapshotName);
+    };
 
     return {
       getSnapshotName,
@@ -219,15 +219,14 @@ class TestRunner extends EmittingTestRunner {
     options: TestRunnerOptions,
   ) {
     const workerPath = require.resolve('./worker');
-    
+
     const rootDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'fastest-jest-runner-'),
     );
     //todo setCleanupBeforeExit
-
-
     const fifoMaker = new FifoMaker(rootDir);
-    const workerFifo = fifoMaker.makeFifo('worker');
+
+    const workerFifo = fifoMaker.makeFifo2('worker');
 
     const testsLeft = new Set<string>();
     const onProcExit: OnProcExit = (data) => {
@@ -285,7 +284,9 @@ class TestRunner extends EmittingTestRunner {
       {
         execArgv: [
           ...currentArgv,
-          ...(fastestRunnerConfig.maxOldSpace ? [`--max-old-space-size=${fastestRunnerConfig.maxOldSpace}`] : []),
+          ...(fastestRunnerConfig.maxOldSpace
+            ? [`--max-old-space-size=${fastestRunnerConfig.maxOldSpace}`]
+            : []),
           '--expose-gc',
           '--v8-pool-size=0',
           '--single-threaded',
@@ -305,45 +306,49 @@ class TestRunner extends EmittingTestRunner {
       console.log(data.toString('utf-8'));
     });
     child.stderr!.on('data', (data) => {
-      const chunk = data.toString('utf-8')
-      console.log(chunk)
+      const chunk = data.toString('utf-8');
+      console.log(chunk);
     });
 
     child.send(workerConfig);
+
 
     const concurrency = options.serial ? 1 : this._globalConfig.maxWorkers;
     // let concurrency = 25;
     console.log({ concurrency });
 
-    const workerWriter = await createAsyncFifoWriter<WorkerInput.Input>(
-      workerFifo,
-    );
+    const workerWriter = await createServer<WorkerInput.Input>(workerFifo.path);
 
     const testsById = new Map<number, Test>();
     const cleanups: Array<() => Promise<void>> = [];
 
     const initSnapshot = async (name: string) => {
-      const snapFifo = fifoMaker.makeFifo('snapshot');
+      const snapFifo = fifoMaker.makeFifo2('snapshot');
 
-      const writer = await createAsyncFifoWriter<WorkerInput.Input>(snapFifo);
+      const writer = await createServer<WorkerInput.Input>(snapFifo.path);
+      // const writer = await createAsyncFifoWriter<WorkerInput.Input>(snapFifo);
       console.log(`spinning!!!!!!!!!!!!!!!!! ${name}`);
+
       await workerWriter.write({
         type: 'spinSnapshot',
         name,
         snapFifo,
       });
       cleanups.push(async () => {
-        await writer.write({ type: 'stop' });
+        await writer.stop()
       });
+      // setInterval(() => {
+      //   writer.write({ type: 'ping' });
+      // }, 1000)
       return { writer };
     };
 
     const initOrGetSnapshot = withCache(initSnapshot);
 
     const runTest = async (test: Test): Promise<TestResult> => {
-      const __timing = createTimings()
+      const __timing = createTimings();
 
-      __timing.time('runTest', 'start')
+      __timing.time('runTest', 'start');
       testsLeft.add(test.path);
       // return new Promise<TestResult>((resolve, reject) => {
       const snapshotName = await getSnapshotName(test);
@@ -354,27 +359,27 @@ class TestRunner extends EmittingTestRunner {
       testsById.set(resultFifo.id, test);
 
       console.log(`sent msg ${test.path}`);
-      
-      __timing.time('writeToFifo', 'start')
+
+      __timing.time('writeToFifo', 'start');
       await snapshotObj.writer.write({
         type: 'test',
         testPath: test.path,
         resultFifo,
       });
-      __timing.time('writeToFifo', 'end')
+      __timing.time('writeToFifo', 'end');
       // child.stdin!.uncork()
       // child.send([id, test.path]);
 
-      __timing.time('readTestResult', 'start')
+      __timing.time('readTestResult', 'start');
       const resp = JSON.parse(
         await fs.promises.readFile(resultFifo.path, 'utf8'),
       ) as WorkerResponse.Response;
-      __timing.time('readTestResult', 'end')
+      __timing.time('readTestResult', 'end');
       await fs.promises.unlink(resultFifo.path);
       testsLeft.delete(test.path);
       // process.kill(resp.pid, 'SIGKILL'); // killing zombies, better to wait for SIGCHLD
       //
-      __timing.time('runTest', 'end')
+      __timing.time('runTest', 'end');
 
       if (resp.testResult.type === 'error') {
         throw resp.testResult.data;
@@ -413,7 +418,7 @@ class TestRunner extends EmittingTestRunner {
 
     const cleanup = async () => {
       await Promise.all(cleanups.map((cl) => cl()));
-      await workerWriter.write({ type: 'stop' });
+      await workerWriter.stop()
       await fs.promises.rm(rootDir, { recursive: true });
       console.log('before proc loop');
       const timer = setTimeout(() => {
@@ -471,4 +476,4 @@ class CancelRun extends Error {
 
 export default TestRunner;
 
-export *  from './snapshots/public';
+export * from './snapshots/public';

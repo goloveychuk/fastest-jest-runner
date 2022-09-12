@@ -14,6 +14,7 @@ import RuntimeMod from 'jest-runtime';
 import HasteMap from 'jest-haste-map';
 import { buildSnapshot } from './snapshots/build';
 import { createTimings, Timing } from './log';
+import { connectToServer } from './socket';
 
 
 // console.log(process.argv[2]);
@@ -99,7 +100,7 @@ async function spinSnapshot(
 ) {
   await buildSnapshot(workerConfig.snapshotConfig, testEnv, payload.name);
   await runGc();
-  if (loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
+  if (await loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
     console.log('snapshot loop stopped: ' + payload.name);
     addon.sendThisProcOk();
     addon.waitForAllChildren();
@@ -107,25 +108,20 @@ async function spinSnapshot(
   }
 }
 
-function loop(
+async function loop(
   workerConfig: WorkerConfig,
   testEnv: TestEnv,
   fifo: Fifo,
-): 'child' | 'main' {
-  const reader = createSyncFifoReader<WorkerInput.Input>(fifo);
+): Promise<'child' | 'main'> {
+  const reader = await connectToServer<WorkerInput.Input>(fifo.path);
 
-  while (true) {
-    const payload = reader.read();
+  for await (const payload of reader.gen()) {
     switch (payload.type) {
-      case 'stop': {
-        return 'main';
-      }
       case 'spinSnapshot': {
         const childPid = addon.fork(payload.snapFifo.id);
-        debugger;
         const isChild = childPid === 0;
         if (isChild) {
-          reader.closeFd()
+          reader.stop()
           spinSnapshot(workerConfig, testEnv, payload).catch((err) => {
             console.error('err in spinSnapshot', err);
             //todo handle properly
@@ -144,7 +140,7 @@ function loop(
         const isChild = childPid === 0;
 
         if (isChild) {
-          reader.closeFd()
+          reader.stop()
           __timing.time('fork', 'end');
           handleChild(__timing, testEnv, payload);
           return 'child';
@@ -158,6 +154,8 @@ function loop(
       }
     }
   }
+  reader.stop()
+  return 'main'
 }
 
 function run(workerConfig: WorkerConfig) {
@@ -184,7 +182,7 @@ function run(workerConfig: WorkerConfig) {
       console.log('before loop');
       addon.startProcControl(workerConfig.procControlFifo.path);
 
-      if (loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
+      if (await loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
         console.log('worker loop stopped');
         addon.waitForAllChildren();
         process.exit(0);

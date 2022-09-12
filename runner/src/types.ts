@@ -184,17 +184,14 @@ export declare namespace WorkerInput {
     resultFifo: Fifo;
   };
 
-  export type Stop = {
-    type: 'stop';
-  };
-
+  
   export type SpinSnapshot = {
     type: 'spinSnapshot';
     name: string;
     snapFifo: Fifo;
   };
 
-  export type Input = RunTest | Stop | SpinSnapshot;
+  export type Input = RunTest | SpinSnapshot
 }
 
 export type RetryData = {
