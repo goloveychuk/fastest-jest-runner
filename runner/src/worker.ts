@@ -21,6 +21,10 @@ const makeHttpReq = () => {
   return fetch('https://www.google.com').then(res => res.text()).then(t => t.length)
 }
 
+declare global {
+  var client: net.Socket | undefined
+}
+
 function connect(sock: string) {
   const client = net.createConnection(sock)
   .on('connect', ()=>{
@@ -29,7 +33,7 @@ function connect(sock: string) {
   // Messages are buffers. use toString
   .on('data', function(_data) {
       const data = _data.toString();
-    console.error('msg in sock', data)
+    console.error('msg in sock', data, process.pid);
       // if(data === '__boop'){
       //     console.info('Server sent boop. Confirming our snoot is booped.');
       //     client.write('__snootbooped');
@@ -46,7 +50,7 @@ function connect(sock: string) {
   .on('error', function(data) {
       console.error('Server not active.'); process.exit(1);
   })
-  ;
+  return client
 
 }
 
@@ -169,12 +173,15 @@ async function loop(
         return 'main';
       }
       case 'spinSnapshot': {
+        globalThis.client?.pause();
         const childPid = addon.fork(payload.snapFifo.id, reader.getFd());
         // debugger;
 
         console.error('fork!spinSnapshot!!!', process.pid)
         const isChild = childPid === 0;
         if (isChild) {
+          globalThis.client?.destroy();
+          globalThis.client = undefined
           // reader.closeFd()
           spinSnapshot(workerConfig, testEnv, payload).catch((err) => {
             console.error('err in spinSnapshot', err);
@@ -182,6 +189,7 @@ async function loop(
           });
           return 'child';
         } else {
+          globalThis.client!.resume();
           // reader.closeFd()
           // anything = true
           console.error('subscribed!!!!!!!');
@@ -190,7 +198,6 @@ async function loop(
           // });
           addon.sub_pipe(workerConfig.fifo2.pipe!.read)
           console.error('after sub_pipe');
-          connect(workerConfig.sock)
           // (async() => {
           //   // const reader = await createAsyncFifoReader<WorkerInput.Input>(workerConfig.fifo2);
           //   while (true) {
@@ -260,6 +267,7 @@ function run(workerConfig: WorkerConfig) {
       console.log('before loop');
       addon.startProcControl(workerConfig.procControlFifo.path);
 
+      globalThis.client = connect(workerConfig.sock)
       
       if (await loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
         console.log('worker loop stopped');

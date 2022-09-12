@@ -32,11 +32,21 @@ Value fork_fn(const CallbackInfo &info)
   //   std::string msg =
   //       "SimpleAsyncWorker for " + std::to_string(runTime) + " seconds queued.";
   //   return String::New(info.Env(), msg.c_str());
+  int err;
+  ssize_t r;
+  int exec_errorno;
+
+  int signal_pipe[2] = {-1, -1};
+
+  err = uv_pipe(signal_pipe, 0, 0);
+  if (err)
+    throw std::runtime_error("fork failed");  
 
   pid_t pid = fork();
 
   if (pid < 0)
   {
+    close(signal_pipe[0]);
     throw std::runtime_error("fork failed");
   }
 
@@ -46,23 +56,26 @@ Value fork_fn(const CallbackInfo &info)
     int fd0 = open("/dev/null", O_RDONLY);
     int fd1 = open("/dev/null", O_RDWR);
     int fd2 = open("/dev/null", O_RDWR);
-    if (fd0 < 0) {
-        perror("open failed\n");
-        exit(0);
+    if (fd0 < 0)
+    {
+      perror("open failed\n");
+      exit(0);
     }
-    if (fd1 < 0) {
-        perror("open failed\n");
-        exit(0);
+    if (fd1 < 0)
+    {
+      perror("open failed\n");
+      exit(0);
     }
-    if (fd2 < 0) {
-        perror("open failed\n");
-        exit(0);
+    if (fd2 < 0)
+    {
+      perror("open failed\n");
+      exit(0);
     }
     dup2(fd0, 0);
     close(fd0);
-    dup2(fd1, 1);
+    // dup2(fd1, 1);
     close(fd1);
-    dup2(fd2, 2);
+    // dup2(fd2, 2);
     close(fd2);
     // setsid(); // 30 s faster??
     uv_loop_t *loop;
@@ -74,9 +87,17 @@ Value fork_fn(const CallbackInfo &info)
     // auto loop = uv_default_loop();
 
     uv_loop_fork(loop);
+    write(signal_pipe[1], 0, sizeof 0);
+    close(signal_pipe[1]);
   }
   else
   {
+    close(signal_pipe[1]);
+
+    do
+      r = read(signal_pipe[0], &exec_errorno, sizeof(exec_errorno));
+    while (r == -1 && errno == EINTR);
+
     // im parent
     write_proc_data(ProcMsgTypes::created, pid, id);
   }
@@ -87,6 +108,9 @@ Value fork_fn(const CallbackInfo &info)
   // }
 
   return Number::New(info.Env(), pid);
+
+// error:
+  // throw std::runtime_error("fork failed");
 };
 
 Value get_my_pid(const CallbackInfo &info)
@@ -145,26 +169,29 @@ Value pipefd(const CallbackInfo &info)
   return obj;
 }
 
-void on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
-    if (nread < 0) {
-        if (nread != UV_EOF)
-            fprintf(stderr, "Read error %s\n", uv_err_name(nread));
-        uv_close((uv_handle_t *) client, NULL);
-        free(buf->base);
-        return;
-    }
-
-    char *data = (char *) malloc(sizeof(char) * (nread + 1));
-    data[nread] = '\0';
-    strncpy(data, buf->base, nread);
-
-    fprintf(stdout, "%s", data);
-    free(data);
+void on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf)
+{
+  if (nread < 0)
+  {
+    if (nread != UV_EOF)
+      fprintf(stderr, "Read error %s\n", uv_err_name(nread));
+    uv_close((uv_handle_t *)client, NULL);
     free(buf->base);
+    return;
+  }
+
+  char *data = (char *)malloc(sizeof(char) * (nread + 1));
+  data[nread] = '\0';
+  strncpy(data, buf->base, nread);
+
+  fprintf(stdout, "%s", data);
+  free(data);
+  free(buf->base);
 }
 
-void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
-    *buf = uv_buf_init((char *) malloc(suggested_size), suggested_size);
+void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
+{
+  *buf = uv_buf_init((char *)malloc(suggested_size), suggested_size);
 }
 
 void sub_pipe(const CallbackInfo &info)
