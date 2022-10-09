@@ -1,29 +1,53 @@
-const {execSync, spawnSync} = require('child_process')
-const {readdirSync, fstat, existsSync} = require('fs')
-const path = require('path')
+const { execSync, spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
-const jestPath = execSync("yarn bin jest").toString().trim()
+const jestPath = execSync('yarn bin jest').toString().trim();
 
 const root = path.join(__dirname, 'benchmarks');
 
-const focus = process.argv[2]
+const focus = process.argv[2];
 
+const allDirs = focus
+  ? [focus]
+  : fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((f) => f.isDirectory())
+      .map((f) => f.name);
 
-const allDirs = focus ? [focus] : readdirSync(root, {withFileTypes: true}).filter(f => f.isDirectory()).map(f => f.name)
+const WORKERS = 12;
 
+const filesCount = 500;
+
+function generateTests(dir) {
+  const template = fs.readFileSync(path.join(dir, 'template.js'), 'utf-8');
+  for (let i = 0; i < filesCount; i++) {
+    const content = template;
+    fs.writeFileSync(path.join(dir, 'gen', `${i}.test.js`), content);
+  }
+}
+
+const allResults = [];
 
 for (const d of allDirs) {
-    console.log('Running tests in', d)
-    const abs = path.join(root, d)
-    const prepareScript = path.join(abs, 'prepare.sh');
-    if (existsSync(prepareScript)) {
-        spawnSync(prepareScript, [], {cwd: abs, stdio: 'inherit'})
-    }
-    const res = spawnSync("node", [jestPath, '-w 12'], {cwd: abs, stdio: 'inherit'})
-    // console.log(res.stdout)
-    // console.log(res.stderr)
-    console.log(res.error)
+  console.log('Running tests in', d);
+  const abs = path.join(root, d);
+  generateTests(abs);
+
+  for (const runner of ['fastest-jest-runner', undefined ]) {
+    const runnerArgs = runner ? ['--runner', runner] : [];
+    let started = Date.now();
+    const res = spawnSync('node', [jestPath, '-w', WORKERS, '--no-cache', ...runnerArgs], {
+      cwd: abs,
+      stdio: 'inherit',
+    });
+
+    const ended = Date.now();
+    allResults.push({ 'runner': runner ?? 'default', 'test': d, 'elapsed (s)': Math.round((ended - started)/1000)});
     if (res.status !== 0) {
-        throw new Error(`Test failed in ${d}`)
+      throw new Error(`Test failed in ${d}`);
     }
+  }
 }
+
+console.table(allResults);

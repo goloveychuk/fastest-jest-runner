@@ -1,0 +1,10 @@
+{
+    "jest": {
+        "globals": {
+            "fastest-jest-runner": {
+                "snapshotBuilderPath": "<rootDir>/snapshot-builder"
+            }
+        },
+        "testEnvironment": "jsdom"
+    }
+}

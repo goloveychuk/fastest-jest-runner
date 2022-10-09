@@ -2203,6 +2203,12 @@ __metadata:
   languageName: node
   linkType: hard
 
+"heavy-module-e751b7@workspace:tests/benchmarks/heavy-module":
+  version: 0.0.0-use.local
+  resolution: "heavy-module-e751b7@workspace:tests/benchmarks/heavy-module"
+  languageName: unknown
+  linkType: soft
+
 "html-encoding-sniffer@npm:^3.0.0":
   version: 3.0.0
   resolution: "html-encoding-sniffer@npm:3.0.0"
@@ -3291,6 +3297,12 @@ __metadata:
   languageName: node
   linkType: hard
 
+"jsdom-248394@workspace:tests/benchmarks/jsdom":
+  version: 0.0.0-use.local
+  resolution: "jsdom-248394@workspace:tests/benchmarks/jsdom"
+  languageName: unknown
+  linkType: soft
+
 "jsdom@npm:^20.0.0":
   version: 20.0.0
   resolution: "jsdom@npm:20.0.0"
@@ -3474,12 +3486,6 @@ __metadata:
   checksum: b38a025a12c8146d6eeea5a7f2bf27d51d8ad6064da8ca9405fcf7bf9b54acd43e3b30ddd7abb9b1bfa4ddb266019133313482570ddb207de568f71ecfcf6060
   languageName: node
   linkType: hard
-
-"many-files-1560eb@workspace:tests/benchmarks/many-files":
-  version: 0.0.0-use.local
-  resolution: "many-files-1560eb@workspace:tests/benchmarks/many-files"
-  languageName: unknown
-  linkType: soft
 
 "merge-stream@npm:^2.0.0":
   version: 2.0.0
