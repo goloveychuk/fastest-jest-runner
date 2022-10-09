@@ -15,7 +15,7 @@ const allDirs = focus
       .filter((f) => f.isDirectory())
       .map((f) => f.name);
 
-const WORKERS = 12;
+const WORKERS = 6;
 
 const filesCount = 500;
 const REPEATS = 3;
