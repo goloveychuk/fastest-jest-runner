@@ -18,7 +18,7 @@ const allDirs = focus
 const WORKERS = 6;
 
 const filesCount = 500;
-const REPEATS = 3;
+const REPEATS = 2;
 
 function generateTests(dir) {
   const template = fs.readFileSync(path.join(dir, 'template.js'), 'utf-8');
@@ -49,7 +49,7 @@ for (const d of allDirs) {
         [jestPath, '-w', WORKERS, '--no-cache', ...runnerArgs],
         {
           cwd: abs,
-          stdio: 'inherit',
+          stdio: 'ignore',
         },
       );
 
