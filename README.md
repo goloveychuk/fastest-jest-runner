@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/fastest-jest-runner.svg)](https://www.npmjs.com/package/fastest-jest-runner)
 
-###Motivation
+### Motivation
 From what I discovered, there are two major reasons of jest slowness, compared to jasmine e.g. 
 1) for every test file jest is creating new env, importing all the modules, creating jsdom env etc
 2) memory leaks, which have even more effect becauase of 1) reason.
@@ -15,7 +15,7 @@ This runner:
 - fixes memory leaks by design: every test is run in new, forked, process, which memory being copied from main process. Process then will end and exit, not affecting and share runtime with parent process.
 - while modules execution problem is not "fixed", it could be improved a lot by creating custom "snapshots", which has imported modules and created objects which then will be used by all tests. Amount of "warmed up" memory does not affect fork time.
 
-#####Tested only with jest 29
+##### Tested only with jest 29
 
 ###How it works:
 This runner is utilizing posix fork syscall.
@@ -33,18 +33,18 @@ You can even import all modules, it will only increase time of snapshot creation
 But imported modules could not be mocked.
 Last could be get arounded by marking tests with custom pragma and use empty snapshot for it (see advanced usage)
 
-###Scheme:
+### Scheme:
 
 ![alt text](docs/design.png "Design")
 
-###Setup:
+### Setup:
 1) `yarn add fastest-jest-runner`
 2) write in `jest.config`: `"runner": "fastest-jest-runner"`
 
-###Advanced usage:
+### Advanced usage:
 [using custom snapshots](tests/e2e/snapshots/package.json)
 
-###Not working:
+### Not working:
 - custom jest runners, except jasmine2 and circus (can be impl)
 - watch mode (can be impl)
 - Windows OS
