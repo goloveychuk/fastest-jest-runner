@@ -22,9 +22,14 @@ const REPEATS = 3;
 
 function generateTests(dir) {
   const template = fs.readFileSync(path.join(dir, 'template.js'), 'utf-8');
+  const genDir = path.join(dir, 'gen');
+  if (fs.existsSync(genDir)) {
+    fs.rmdirSync(genDir);
+  }
+  fs.mkdirSync(genDir);
   for (let i = 0; i < filesCount; i++) {
     const content = template;
-    fs.writeFileSync(path.join(dir, 'gen', `${i}.test.js`), content);
+    fs.writeFileSync(path.join(genDir, `${i}.test.js`), content);
   }
 }
 
