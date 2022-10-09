@@ -1,0 +1,102 @@
+<html>
+  <head>
+    <script
+      type="text/javascript"
+      src="https://www.gstatic.com/charts/loader.js"
+    ></script>
+    <script type="text/javascript">
+      const groupsCount = 32;
+      google.charts.load('current', { packages: ['table', 'timeline'] });
+      google.charts.setOnLoadCallback(drawTable);
+
+      const last = (arr) => arr[arr.length -1 ];
+      const sum = arr => arr.reduce((acc, v) => acc+v, 0)
+      const getStartEnd = (d) => {
+        const timingsByType = {}
+        for (const t of d.timings) {
+          timingsByType[t.phase] = timingsByType[t.phase] ?? {};
+          timingsByType[t.phase][t.type] = t.time;
+        }
+//         'runTest',
+//   'writeToFifo',
+//   'fork',
+// //   'handleTestRes',
+// //   'writeResult',
+//   'innerRunTest',
+//   'readTestResult',
+        // return d
+        // return timingsByType['innerRunTest']
+        return {
+          start: timingsByType['runTest'].start,
+          end: timingsByType['fork'].start,
+          // end: timingsByType['writeToFifo'].end,
+          // end: timingsByType['readTestResult'].end,
+        }
+      }
+      
+      function formatTasksToTimelineData(data) {
+        data = Object.entries(data).map(([name, d]) => ({name, ...getStartEnd(d)}));
+        data = data.sort((a, b) => {
+          return a.start - b.start;
+        });
+        console.log('sum', sum(data.slice(groupsCount).map(x => x.end - x.start))/1000/60)
+        groups = data.slice(0, groupsCount);
+        
+        const groupsMapping = Object.fromEntries(groups.map((g, ind) => [g.name, ind]))
+
+        for (const i of data.slice(groupsCount)) {
+          let minInd = 0;
+          let minV = 9999999999999999;
+
+          groups.forEach((g, ind) => {
+            const v = i.start - g.end;
+            if (v > 0 && v < minV) {
+              minInd = ind;
+              minV = v;
+            }
+          });
+          groupsMapping[i.name] = minInd
+          groups[minInd] = i
+        }
+
+        // const min = Math.min(...data.map(d => d[1].start)) + 1;
+        return data.map((task, ind) => [
+          // String(ind % groupsCount),
+          String(groupsMapping[task.name]),
+          last(task.name.split('/')),
+          // tooltipComponent(task),
+          new Date(task.start),
+          new Date(task.end),
+        ]);
+      }
+
+      function drawTable() {
+        const dataTable = new google.visualization.DataTable();
+        // Set chart options
+        const options = {
+          timeline: { colorByRowLabel: true },
+          height: 800,
+          tooltip: { isHtml: true },
+        };
+
+        const data = JSON.parse(`{{}}`)
+
+        const tasks = formatTasksToTimelineData(data);
+        dataTable.addColumn({ type: 'string', id: 'group' });
+        dataTable.addColumn({ type: 'string', id: 'name' });
+        // dataTable.addColumn({ type: 'string', role: 'tooltip' });
+        dataTable.addColumn({ type: 'date', id: 'Start' });
+        dataTable.addColumn({ type: 'date', id: 'End' });
+        dataTable.addRows(tasks);
+        // Instantiate and draw our chart, passing in some options.
+        const newChart = new google.visualization.Timeline(
+          document.getElementById('table_div'),
+        );
+        newChart.draw(dataTable, options);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="table_div"></div>
+  </body>
+</html>

@@ -10,4 +10,4 @@ class IncompleteReporter {
     }
   }
   
-  module.exports = IncompleteReporter;
+module.exports = IncompleteReporter;
