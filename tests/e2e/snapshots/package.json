@@ -1,0 +1,12 @@
+{
+    "jest": {
+        "preset": "ts-jest",
+        "runner": "fastest-jest-runner",
+        "globals": {
+            "fastest-jest-runner": {
+                "snapshotBuilderPath": "<rootDir>/snapshot-builder.ts",
+                "maxOldSpace": 3100
+            }
+        }
+    }
+}

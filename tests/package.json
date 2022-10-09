@@ -7,6 +7,8 @@
     "devDependencies": {
         "fastest-jest-runner": "*",
         "jest": "29.0.1",
-        "jest-environment-jsdom": "29.0.1"
+        "jest-environment-jsdom": "29.0.1",
+        "lodash": "^4.17.21",
+        "ts-jest": "^29.0.0"
     }
 }

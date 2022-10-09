@@ -6,7 +6,8 @@ Setup:
 1) `yarn add fastest-jest-runner`
 2) write in `jest.config`: `"runner": "fastest-jest-runner"`
 
-Additional setup:
+Advanced usage:
+
 
 Public
 

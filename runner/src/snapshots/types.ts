@@ -11,7 +11,7 @@ export type GetSnapshotConfig = {
   docblockPragmas: Record<string, string | string[]>;
   testPath: string
 }
-export type BuildSnapshotFn = (builder: SnapshotBuilderContext) => Promise<void>;
+export type BuildSnapshotFn = (builder: SnapshotBuilderContext) => Promise<void> | void;
 
 export type SnapshotBuilder<T extends string> = {
   snapshots: Record<T, BuildSnapshotFn>;
