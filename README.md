@@ -44,7 +44,7 @@ Last could be get arounded by marking tests with custom pragma and use empty sna
 ### Advanced usage:
 [using custom snapshots](tests/e2e/snapshots/package.json)
 
-### [Benchmarks](./test/benchmarks)
+### [Benchmarks](./tests/benchmarks)
 ![image](https://user-images.githubusercontent.com/2370419/194769957-b1bd911c-66d5-458b-9a19-4a21824e5a50.png)
 
 
