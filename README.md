@@ -7,7 +7,7 @@ Setup:
 2) write in `jest.config`: `"runner": "fastest-jest-runner"`
 
 Advanced usage:
-
+[using custom snapshots](tests/e2e/snapshots/package.json)
 
 Public
 
