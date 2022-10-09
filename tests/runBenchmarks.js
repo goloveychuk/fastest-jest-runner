@@ -18,6 +18,7 @@ const allDirs = focus
 const WORKERS = 12;
 
 const filesCount = 500;
+const REPEATS = 3;
 
 function generateTests(dir) {
   const template = fs.readFileSync(path.join(dir, 'template.js'), 'utf-8');
@@ -34,18 +35,29 @@ for (const d of allDirs) {
   const abs = path.join(root, d);
   generateTests(abs);
 
-  for (const runner of ['fastest-jest-runner', undefined ]) {
-    const runnerArgs = runner ? ['--runner', runner] : [];
-    let started = Date.now();
-    const res = spawnSync('node', [jestPath, '-w', WORKERS, '--no-cache', ...runnerArgs], {
-      cwd: abs,
-      stdio: 'inherit',
-    });
+  for (let repeat = 0; repeat < REPEATS; repeat++) {
+    for (const runner of ['fastest-jest-runner', undefined]) {
+      const runnerArgs = runner ? ['--runner', runner] : [];
+      let started = Date.now();
+      const res = spawnSync(
+        'node',
+        [jestPath, '-w', WORKERS, '--no-cache', ...runnerArgs],
+        {
+          cwd: abs,
+          stdio: 'inherit',
+        },
+      );
 
-    const ended = Date.now();
-    allResults.push({ 'runner': runner ?? 'default', 'test': d, 'elapsed (s)': Math.round((ended - started)/1000)});
-    if (res.status !== 0) {
-      throw new Error(`Test failed in ${d}`);
+      const ended = Date.now();
+      allResults.push({
+        runner: runner ?? 'default',
+        test: d,
+        repeat,
+        'elapsed (s)': Math.round((ended - started) / 1000),
+      });
+      if (res.status !== 0) {
+        throw new Error(`Test failed in ${d}`);
+      }
     }
   }
 }
