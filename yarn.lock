@@ -961,6 +961,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/debug@npm:^4.1.7":
+  version: 4.1.7
+  resolution: "@types/debug@npm:4.1.7"
+  dependencies:
+    "@types/ms": "*"
+  checksum: 0a7b89d8ed72526858f0b61c6fd81f477853e8c4415bb97f48b1b5545248d2ae389931680b94b393b993a7cfe893537a200647d93defe6d87159b96812305adc
+  languageName: node
+  linkType: hard
+
 "@types/exit@npm:^0.1.30":
   version: 0.1.31
   resolution: "@types/exit@npm:0.1.31"
@@ -1012,6 +1021,13 @@ __metadata:
     "@types/tough-cookie": "*"
     parse5: ^7.0.0
   checksum: 13e67d31347e02d46ec6a23919b3ce39d86136665922a2a6cb977e216a2f46c22d2f025d0586a64ab492ebaa5f43da669b6f173a5a8cfd3e3bb7c9d19b6cfa9e
+  languageName: node
+  linkType: hard
+
+"@types/ms@npm:*":
+  version: 0.7.31
+  resolution: "@types/ms@npm:0.7.31"
+  checksum: daadd354aedde024cce6f5aa873fefe7b71b22cd0e28632a69e8b677aeb48ae8caa1c60e5919bb781df040d116b01cb4316335167a3fc0ef6a63fa3614c0f6da
   languageName: node
   linkType: hard
 
@@ -1695,7 +1711,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"debug@npm:4, debug@npm:^4.1.0, debug@npm:^4.1.1, debug@npm:^4.3.3":
+"debug@npm:4, debug@npm:^4.1.0, debug@npm:^4.1.1, debug@npm:^4.3.3, debug@npm:^4.3.4":
   version: 4.3.4
   resolution: "debug@npm:4.3.4"
   dependencies:
@@ -1977,12 +1993,14 @@ __metadata:
     "@jest/transform": ^29.0.0
     "@jest/types": ^29.0.0
     "@types/co": ^4.6.2
+    "@types/debug": ^4.1.7
     "@types/exit": ^0.1.30
     "@types/graceful-fs": ^4.1.3
     "@types/node": 14.14.45
     "@types/source-map-support": ^0.5.0
     chalk: ^4.0.0
     co: ^4.6.0
+    debug: ^4.3.4
     emittery: ^0.10.2
     graceful-fs: ^4.2.9
     is-generator-fn: ^2.0.0

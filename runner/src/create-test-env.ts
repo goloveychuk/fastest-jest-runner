@@ -10,7 +10,7 @@ import {
   getConsoleOutput,
 } from '@jest/console';
 import type { JestEnvironment } from '@jest/environment';
-
+import {debugLog} from './log'
 import type { Config } from '@jest/types';
 // import * as docblock from 'jest-docblock';
 // import LeakDetector from 'jest-leak-detector';
@@ -139,7 +139,7 @@ export async function createTestEnv({
   const transformer = await createScriptTransformer(projectConfig, cacheFS);
 
   // require(testEnvironment)
-  // console.log(await transformer.requireAndTranspileModule(testEnvironment))
+
   // return
 
   const TestEnvironment: typeof JestEnvironment =
@@ -358,7 +358,7 @@ export async function createTestEnv({
 
   const runTest = async (path: string) => {
     const start = Date.now();
-    // console.log('started executing test', path);
+    debugLog('started executing test', path);
 
     try {
       let result: TestResult;
@@ -384,7 +384,7 @@ export async function createTestEnv({
         // if (collectV8Coverage) {
         //   await runtime.stopCollectingV8Coverage();
         // }
-        console.log('finished executing test', path);
+        debugLog('finished executing test', path);
       }
 
       // freezeConsole(testConsole, projectConfig);

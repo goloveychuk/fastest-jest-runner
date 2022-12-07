@@ -33,7 +33,7 @@ import type { SnapshotBuilderModule, SnapshotConfig } from './snapshots/types';
 import { replaceRootDirInPath } from 'jest-config';
 import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
-import { createTimings } from './log';
+import { createTimings, debugLog } from './log';
 import { createMultiConServer, createServer } from './socket';
 
 function setCleanupBeforeExit(clean: () => void) {
@@ -46,8 +46,7 @@ function setCleanupBeforeExit(clean: () => void) {
       called = true;
       clean();
     }
-    // if (options.cleanup) console.log('clean');
-    // if (exitCode || exitCode === 0) console.log(exitCode);
+
     if (options.exit) {
       process.exit(exitCode);
     }
@@ -300,8 +299,14 @@ class TestRunner extends EmittingTestRunner {
     child.on('exit', (res) => {
       console.log('exit from root process!!!!!', res); //todo handle this, finish testrun
       // if (testsLeft) {
-      console.log('Tests left:', Array.from(testsLeft).join('\n'));
-      // }
+      if (res === 0) {
+        if (testsLeft.size) {
+          console.error('Tests left:', Array.from(testsLeft).join('\n'));
+        }
+      } else {
+        process.exit(1)
+      }
+      
     });
 
     child.stdout!.on('data', (data) => {
@@ -322,7 +327,6 @@ class TestRunner extends EmittingTestRunner {
 
     const concurrency = options.serial ? 1 : this._globalConfig.maxWorkers;
     // let concurrency = 25;
-    console.log({ concurrency });
 
     const workerWriter = await createServer<WorkerInput.Input>(workerFifo.path);
 
@@ -334,7 +338,7 @@ class TestRunner extends EmittingTestRunner {
 
       const writer = await createServer<WorkerInput.Input>(snapFifo.path);
       // const writer = await createAsyncFifoWriter<WorkerInput.Input>(snapFifo);
-      console.log(`spinning!!!!!!!!!!!!!!!!! ${name}`);
+      debugLog(`spinning!!!!!!!!!!!!!!!!! ${name}`);
 
       await workerWriter.write({
         type: 'spinSnapshot',
@@ -369,7 +373,7 @@ class TestRunner extends EmittingTestRunner {
       })
       testsById.set(resultFifo.id, test);
 
-      console.log(`sent msg ${test.path}`);
+      debugLog(`sent msg ${test.path}`);
 
       __timing.time('writeToFifo', 'start');
       await snapshotObj.writer.write({
@@ -402,9 +406,7 @@ class TestRunner extends EmittingTestRunner {
       // }
       // });
     };
-    // setInterval(() => {
-    //   console.log('tick');
-    // }, 1000);
+    
     const mutex = pLimit(concurrency);
     const runTestLimited = (test: Test) =>
       mutex(async () => {
@@ -431,7 +433,7 @@ class TestRunner extends EmittingTestRunner {
       await workerWriter.stop()
       await respServer.stop()
       await fs.promises.rm(rootDir, { recursive: true });
-      console.log('before proc loop');
+      debugLog('before proc loop');
       const timer = setTimeout(() => {
         //better wait for worker exit
         const processes = procControl.getLeftProcesses(); //case for ayout/switchLayoutUtil.unit.ts // deadlock, workers
@@ -456,11 +458,10 @@ class TestRunner extends EmittingTestRunner {
       }, 3000);
       await procLoop;
       clearTimeout(timer);
-      console.log('after proc loop await');
-      // if (testsLeft.size) {
-      console.log('Tests left:', Array.from(testsLeft).join('\n'));
 
-      // }
+      if (testsLeft.size) {
+        console.error('Tests left:', Array.from(testsLeft).join('\n'));
+      }
       // child.kill('SIGTERM');
     };
 

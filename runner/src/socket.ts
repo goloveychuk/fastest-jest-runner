@@ -1,4 +1,5 @@
 import * as net from 'net';
+import { debugLog } from './log';
 
 type Payload<T> =
   | {
@@ -44,7 +45,6 @@ export async function createMultiConServer<T>(
 export async function sendRequest<T>(socketPath: string, d: T) {
   return new Promise<void>((resolve) => {
     const client = net.createConnection(socketPath, () => {
-    //   console.log('connected');
       const str = JSON.stringify(d);
       client.end(str, 'utf8', resolve);
     });
@@ -137,7 +137,7 @@ export async function connectToServer<T>(socketPath: string) {
   let counter = 0;
 
   const client = net.createConnection(socketPath, () => {
-    console.log('connected');
+    debugLog('connected');
   });
 
   async function* gen() {
@@ -145,7 +145,7 @@ export async function connectToServer<T>(socketPath: string) {
       const msg = JSON.parse(d) as Payload<T>;
 
       if (msg.kind === 'ping') {
-        console.log('ping');
+        debugLog('ping');
         continue;
       } else if (msg.kind === 'stop') {
         return;

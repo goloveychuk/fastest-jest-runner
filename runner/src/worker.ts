@@ -13,7 +13,7 @@ import type { Fifo } from './fifo-maker';
 import RuntimeMod from 'jest-runtime';
 import HasteMap from 'jest-haste-map';
 import { buildSnapshot } from './snapshots/build';
-import { createTimings, Timing } from './log';
+import { createTimings, debugLog, Timing } from './log';
 import { connectToServer, sendRequest } from './socket';
 
 
@@ -44,7 +44,7 @@ function handleChild(__timing: Timing, testEnv: TestEnv, payload: WorkerInput.Ru
       pid: process.pid,
       testResult: data,
     };
-    console.log('writing to', payload.resultFifo.path);
+    debugLog('writing to', payload.resultFifo.path);
     // __timing.time('writeResult', 'start');
     // fs.writeFileSync(payload.resultFifo.path, JSON.stringify(resp));
     await sendRequest(payload.resPath, resp)
@@ -90,7 +90,7 @@ function handleChild(__timing: Timing, testEnv: TestEnv, payload: WorkerInput.Ru
       },
     )
     .finally(() => {
-      console.log('exiting');
+      debugLog('exiting');
       process.exit(0);
     });
 }
@@ -103,7 +103,7 @@ async function spinSnapshot(
   await buildSnapshot(workerConfig.snapshotConfig, testEnv, payload.name);
   await runGc();
   if (await loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
-    console.log('snapshot loop stopped: ' + payload.name);
+    debugLog('snapshot loop stopped: ' + payload.name);
     addon.sendThisProcOk();
     addon.waitForAllChildren();
     process.exit(0);
@@ -178,14 +178,11 @@ function run(workerConfig: WorkerConfig) {
   })
     .then(async (testEnv) => {
       await runGc();
-
-      console.log('setRunTestFn');
-
-      console.log('before loop');
+      debugLog('before loop');
       addon.startProcControl(workerConfig.procControlFifo.path);
 
       if (await loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
-        console.log('worker loop stopped');
+        debugLog('worker loop stopped');
         addon.waitForAllChildren();
         process.exit(0);
       }
