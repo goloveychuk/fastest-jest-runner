@@ -35,6 +35,7 @@ import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
 import { createTimings, debugLog } from './log';
 import { createMultiConServer, createServer } from './socket';
+import { splitByNewline } from './utils';
 
 function setCleanupBeforeExit(clean: () => void) {
   let called = false;
@@ -77,6 +78,26 @@ function withCache<TArg extends string | number, TRes>(
     }
     return cache.get(arg)!;
   };
+}
+
+async function* filterErrors(gen: AsyncGenerator<string>) {
+  let isError = false;
+  for await (const item of gen) {
+    if (item.includes('uv_thread_join(threads_[i].get()))')) {
+      isError = true;
+      continue;
+    } else {
+      // console.log(')))', {isError}, item.search(/^ *\d+: /), JSON.stringify(item))
+      if (isError) {
+        if (item.search(/^ *\d+: /) !== -1) {
+          continue;
+        } else {
+          isError = false;
+        }
+      }
+    }
+    yield item;
+  }
 }
 
 class TestRunner extends EmittingTestRunner {
@@ -237,7 +258,7 @@ class TestRunner extends EmittingTestRunner {
           `Proc exited without response, status=${data.status}`,
         ),
       };
-      testsPromises.get(resp.id)!(resp)
+      testsPromises.get(resp.id)!(resp);
       // fs.writeFileSync(fifo.path, JSON.stringify(resp));
     };
 
@@ -304,26 +325,32 @@ class TestRunner extends EmittingTestRunner {
           console.error('Tests left:', Array.from(testsLeft).join('\n'));
         }
       } else {
-        process.exit(1)
+        process.exit(1);
       }
-      
     });
 
     child.stdout!.on('data', (data) => {
       console.log(data.toString('utf-8'));
     });
-    child.stderr!.on('data', (data) => {
-      const chunk = data.toString('utf-8');
-      console.log(chunk);
-    });
+
+    const stderrPromise = (async () => {
+      for await (const line of filterErrors(
+        splitByNewline(child.stderr! as any),
+      )) {
+        console.log(line);
+      }
+    })();
 
     child.send(workerConfig);
     const respsFifo = fifoMaker.makeFifo2('resp');
 
-    let testsPromises = new Map<number, (d: WorkerResponse.Response) => void>()
-    const respServer = await createMultiConServer<WorkerResponse.Response>(respsFifo.path, (res=> {
-      testsPromises.get(res.id)!(res);
-    }));
+    let testsPromises = new Map<number, (d: WorkerResponse.Response) => void>();
+    const respServer = await createMultiConServer<WorkerResponse.Response>(
+      respsFifo.path,
+      (res) => {
+        testsPromises.get(res.id)!(res);
+      },
+    );
 
     const concurrency = options.serial ? 1 : this._globalConfig.maxWorkers;
     // let concurrency = 25;
@@ -346,7 +373,7 @@ class TestRunner extends EmittingTestRunner {
         snapFifo,
       });
       cleanups.push(async () => {
-        await writer.stop()
+        await writer.stop();
       });
       // setInterval(() => {
       //   writer.write({ type: 'ping' });
@@ -357,7 +384,6 @@ class TestRunner extends EmittingTestRunner {
     const initOrGetSnapshot = withCache(initSnapshot);
 
     const runTest = async (test: Test): Promise<TestResult> => {
-      
       const __timing = createTimings();
 
       __timing.time('runTest', 'start');
@@ -366,11 +392,11 @@ class TestRunner extends EmittingTestRunner {
       const snapshotName = await getSnapshotName(test);
 
       const snapshotObj = await initOrGetSnapshot(snapshotName);
-      
+
       const resultFifo = fifoMaker.makeFifo2('result');
       const resPromise = new Promise<WorkerResponse.Response>((resolve) => {
         testsPromises.set(resultFifo.id, resolve);
-      })
+      });
       testsById.set(resultFifo.id, test);
 
       debugLog(`sent msg ${test.path}`);
@@ -387,7 +413,7 @@ class TestRunner extends EmittingTestRunner {
       // child.send([id, test.path]);
 
       __timing.time('readTestResult', 'start');
-      const resp = await resPromise
+      const resp = await resPromise;
       __timing.time('readTestResult', 'end');
       // await fs.promises.unlink(resultFifo.path);
       testsLeft.delete(test.path);
@@ -406,7 +432,7 @@ class TestRunner extends EmittingTestRunner {
       // }
       // });
     };
-    
+
     const mutex = pLimit(concurrency);
     const runTestLimited = (test: Test) =>
       mutex(async () => {
@@ -430,8 +456,8 @@ class TestRunner extends EmittingTestRunner {
 
     const cleanup = async () => {
       await Promise.all(cleanups.map((cl) => cl()));
-      await workerWriter.stop()
-      await respServer.stop()
+      await workerWriter.stop();
+      await respServer.stop();
       await fs.promises.rm(rootDir, { recursive: true });
       debugLog('before proc loop');
       const timer = setTimeout(() => {

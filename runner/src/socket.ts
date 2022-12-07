@@ -1,5 +1,6 @@
 import * as net from 'net';
 import { debugLog } from './log';
+import { splitByNewline } from './utils';
 
 type Payload<T> =
   | {
@@ -15,7 +16,6 @@ type Payload<T> =
       kind: 'stop';
     };
 
-const DELIMITER = '\n';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -70,7 +70,7 @@ export async function createServer<T>(socketPath: string) {
 
   const _write = async (payload: Payload<unknown>, end?: boolean) => {
     const socket = await connected; //todo await prev req?
-    const serialized = JSON.stringify(payload) + DELIMITER;
+    const serialized = JSON.stringify(payload) + '\n';
 
     await new Promise<void>((resolve, reject) =>
       socket.write(serialized, (err) => {
@@ -118,20 +118,7 @@ export async function createServer<T>(socketPath: string) {
   return { write, stop };
 }
 
-async function* splitByNewline(gen: {
-  [Symbol.asyncIterator](): AsyncGenerator<any, any, void>;
-}) {
-  let soFar: string | undefined = undefined;
 
-  for await (const data of gen) {
-    const parts: string[] = ((soFar ?? '') + data).split(DELIMITER);
-    soFar = parts.pop();
-
-    for (const part of parts) {
-      yield part;
-    }
-  }
-}
 
 export async function connectToServer<T>(socketPath: string) {
   let counter = 0;
