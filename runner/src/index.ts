@@ -21,20 +21,15 @@ import {
   UnsubscribeFn,
   WorkerInput,
   WorkerResponse,
-  makeErrorResp,
-  NormalizedFastestJestRunnerConfig,
+  
   normalizeRunnerConfig,
 } from './types';
-
-import { FifoMaker } from './fifo-maker';
-import { OnProcExit, ProcControl } from './proc-control';
-import { createAsyncFifoWriter } from './protocol';
 import type { SnapshotBuilderModule, SnapshotConfig } from './snapshots/types';
 import { replaceRootDirInPath } from 'jest-config';
 import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
 import { createTimings } from './log';
-import { createMultiConServer, createServer } from './socket';
+import { wrapChild } from './wrapChild';
 
 function setCleanupBeforeExit(clean: () => void) {
   let called = false;
@@ -224,29 +219,9 @@ class TestRunner extends EmittingTestRunner {
       path.join(os.tmpdir(), 'fastest-jest-runner-'),
     );
     //todo setCleanupBeforeExit
-    const fifoMaker = new FifoMaker(rootDir);
-
-    const workerFifo = fifoMaker.makeFifo2('worker');
 
     const testsLeft = new Set<string>();
-    const onProcExit: OnProcExit = (data) => {
-      // const fifo = fifoMaker.getFifoById(data.id);
-      const resp: WorkerResponse.Response = {
-        id: data.id,
-        pid: data.pid,
-        testResult: makeErrorResp(
-          `Proc exited without response, status=${data.status}`,
-        ),
-      };
-      testsPromises.get(resp.id)!(resp)
-      // fs.writeFileSync(fifo.path, JSON.stringify(resp));
-    };
 
-    const procControlFifo = fifoMaker.makeFifo('proc_contrl');
-
-    const procControl = new ProcControl(procControlFifo, onProcExit);
-
-    const procLoop = procControl.loop();
 
     const serializableModuleMap = tests[0].context.moduleMap.toJSON();
 
@@ -263,8 +238,6 @@ class TestRunner extends EmittingTestRunner {
       projectConfig,
       globalConfig: this._globalConfig,
       snapshotConfig,
-      workerFifo,
-      procControlFifo,
       serializableModuleMap,
     };
 
@@ -290,6 +263,7 @@ class TestRunner extends EmittingTestRunner {
             ? [`--max-old-space-size=${fastestRunnerConfig.maxOldSpace}`]
             : []),
           '--expose-gc',
+          '--expose-internals',
           '--v8-pool-size=0',
           '--single-threaded',
           // '--unhandled-rejections=warn'
@@ -313,49 +287,40 @@ class TestRunner extends EmittingTestRunner {
     });
 
     child.send(workerConfig);
-    const respsFifo = fifoMaker.makeFifo2('resp');
-
     let testsPromises = new Map<number, (d: WorkerResponse.Response) => void>()
-    const respServer = await createMultiConServer<WorkerResponse.Response>(respsFifo.path, (res=> {
-      testsPromises.get(res.id)!(res);
-    }));
+
+
+    const worker = wrapChild<WorkerInput.Input, WorkerResponse.Response>(child, res => {
+      testsPromises.get(res.testId)!(res);
+    });
+
+
 
     const concurrency = options.serial ? 1 : this._globalConfig.maxWorkers;
     // let concurrency = 25;
     console.log({ concurrency });
 
-    const workerWriter = await createServer<WorkerInput.Input>(workerFifo.path);
 
     const testsById = new Map<number, Test>();
-    const cleanups: Array<() => Promise<void>> = [];
 
     const initSnapshot = async (name: string) => {
-      const snapFifo = fifoMaker.makeFifo2('snapshot');
 
-      const writer = await createServer<WorkerInput.Input>(snapFifo.path);
       // const writer = await createAsyncFifoWriter<WorkerInput.Input>(snapFifo);
       console.log(`spinning!!!!!!!!!!!!!!!!! ${name}`);
 
-      await workerWriter.write({
+      await worker.send({
         type: 'spinSnapshot',
         name,
-        snapFifo,
       });
-      cleanups.push(async () => {
-        await writer.stop()
-      });
-      // setInterval(() => {
-      //   writer.write({ type: 'ping' });
-      // }, 1000)
-      return { writer };
+      
     };
 
     const initOrGetSnapshot = withCache(initSnapshot);
 
+    let id = 0
     const runTest = async (test: Test): Promise<TestResult> => {
-      
       const __timing = createTimings();
-
+      const testId = ++id
       __timing.time('runTest', 'start');
       testsLeft.add(test.path);
       // return new Promise<TestResult>((resolve, reject) => {
@@ -363,20 +328,19 @@ class TestRunner extends EmittingTestRunner {
 
       const snapshotObj = await initOrGetSnapshot(snapshotName);
       
-      const resultFifo = fifoMaker.makeFifo2('result');
       const resPromise = new Promise<WorkerResponse.Response>((resolve) => {
-        testsPromises.set(resultFifo.id, resolve);
+        testsPromises.set(testId, resolve);
       })
-      testsById.set(resultFifo.id, test);
+      testsById.set(testId, test);
 
       console.log(`sent msg ${test.path}`);
 
       __timing.time('writeToFifo', 'start');
-      await snapshotObj.writer.write({
+      await worker.send({
         type: 'test',
         testPath: test.path,
-        resPath: respsFifo.path,
-        resultFifo,
+        testId,
+        snapshotName,
       });
       __timing.time('writeToFifo', 'end');
       // child.stdin!.uncork()
@@ -427,14 +391,12 @@ class TestRunner extends EmittingTestRunner {
       });
 
     const cleanup = async () => {
-      await Promise.all(cleanups.map((cl) => cl()));
-      await workerWriter.stop()
-      await respServer.stop()
       await fs.promises.rm(rootDir, { recursive: true });
       console.log('before proc loop');
       const timer = setTimeout(() => {
+        const processes: any[] = [];
         //better wait for worker exit
-        const processes = procControl.getLeftProcesses(); //case for ayout/switchLayoutUtil.unit.ts // deadlock, workers
+        // const processes = procControl.getLeftProcesses(); //case for ayout/switchLayoutUtil.unit.ts // deadlock, workers
         // console.warn('got not finished processes:\n', JSON.stringify(processes.map(([pid, data]) => {
         //   return {pid, ...data, filename: testsById.get(data.id)?.path}
         // })))
@@ -454,7 +416,6 @@ class TestRunner extends EmittingTestRunner {
           }
         }
       }, 3000);
-      await procLoop;
       clearTimeout(timer);
       console.log('after proc loop await');
       // if (testsLeft.size) {
