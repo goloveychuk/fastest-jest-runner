@@ -20,7 +20,6 @@ import type {SerializableModuleMap} from 'jest-haste-map';
 import type RuntimeType from 'jest-runtime';
 import type {TestWatcher} from 'jest-watcher';
 
-import type {Fifo} from './fifo-maker';
 import { SnapshotConfig } from './snapshots/types';
 
 
@@ -164,9 +163,6 @@ export interface WorkerConfig {
   globalConfig: Config.GlobalConfig;
   context: TestRunnerContext;
   snapshotConfig: SnapshotConfig;
-
-  workerFifo: Fifo;
-  procControlFifo: Fifo;
   serializableModuleMap: SerializableModuleMap;
 }
 
@@ -181,15 +177,14 @@ export declare namespace WorkerInput {
   export type RunTest = {
     type: 'test';
     testPath: string;
-    resPath: string
-    resultFifo: Fifo;
+    testId: number
+    snapshotName: string
   };
 
   
   export type SpinSnapshot = {
     type: 'spinSnapshot';
     name: string;
-    snapFifo: Fifo;
   };
 
   export type Input = RunTest | SpinSnapshot
@@ -212,7 +207,7 @@ export declare namespace WorkerResponse {
   };
 
   export type Response = {
-    id: number
+    testId: number
     pid: number;
     testResult: TestResultResp | ErrorResp;
   };

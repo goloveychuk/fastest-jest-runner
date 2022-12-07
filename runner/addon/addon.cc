@@ -9,7 +9,7 @@
 // #include <iostream>
 
 
-#include "ev_loop.h"
+// #include "ev_loop.h"
 // #include "childsub_cb.h"
 #include "childsub.h"
 //
@@ -25,7 +25,7 @@ using namespace Napi;
 
 Value fork_fn(const CallbackInfo &info)
 {
-  int id = info[0].As<Number>();
+  // int id = info[0].As<Number>();
   //   Function callback = info[1].As<Function>();
   //   SimpleAsyncWorker* asyncWorker = new SimpleAsyncWorker(callback, runTime);
   //   asyncWorker->Queue();
@@ -56,7 +56,7 @@ Value fork_fn(const CallbackInfo &info)
   else
   {
     // im parent
-    write_proc_data(ProcMsgTypes::created, pid, id);
+    // write_proc_data(ProcMsgTypes::created, pid, id);
   }
 
   // if (pid < 0)
@@ -74,19 +74,26 @@ Value get_my_pid(const CallbackInfo &info)
   return Number::New(info.Env(), my_pid);
 }
 
-void make_fifo(const CallbackInfo &info)
+Value make_socket_pair(const CallbackInfo &info)
 {
-  auto file = info[0].As<String>().Utf8Value();
-  auto cstr = file.c_str();
-  remove(cstr);
-  int res = mkfifo(cstr, 0644);
-  if (res)
-  {
-    fprintf(stderr, "mkfifo failed: %s\n", strerror(res));
-    throw std::runtime_error("mkfifo failed");
-  }
+  auto env = info.Env();
+  // auto file = info[0].As<String>().Utf8Value();
+  // auto cstr = file.c_str();
+  // remove(cstr);
+  // int res = mkfifo(cstr, 0644);
+  // if (res)
+  // {
+  //   fprintf(stderr, "mkfifo failed: %s\n", strerror(res));
+  //   throw std::runtime_error("mkfifo failed");
+  // }
+  int fds[2];
+  uv_socketpair(1, 0, fds, 0, 0);
 
-  return;
+  auto res = Int32Array::New(env, 2);
+  res[0] = fds[0];
+  res[1] = fds[1];
+
+  return res;
 }
 
 void wait_for_all_children(const CallbackInfo &info)
@@ -95,14 +102,11 @@ void wait_for_all_children(const CallbackInfo &info)
   int status;
   while ((pid = waitpid(-1, &status, 0)) > 0)
   {
-    write_proc_data(ProcMsgTypes::exited, pid, status);
+    // write_proc_data(ProcMsgTypes::exited, pid, status);
   };
 }
 
-void send_this_proc_ok(const CallbackInfo &info)
-{
-  write_proc_data(ProcMsgTypes::proc_ok, getpid(), 0);
-}
+
 
 Object Init(Env env, Object exports)
 {
@@ -110,12 +114,8 @@ Object Init(Env env, Object exports)
       env, fork_fn, std::string("fork_fn"));
   exports["getpid"] = Function::New(
       env, get_my_pid, std::string("get_my_pid"));
-  exports["subscribe_child"] = Function::New(
-      env, subscribe_child, std::string("subscribe_child"));
-  exports["make_fifo"] = Function::New(
-      env, make_fifo, std::string("make_fifo"));
-  exports["send_this_proc_ok"] = Function::New(
-      env, send_this_proc_ok, std::string("send_this_proc_ok"));
+  exports["make_socket_pair"] = Function::New(
+      env, make_socket_pair, std::string("make_socket_pair"));
   exports["wait_for_all_children"] = Function::New(
       env, wait_for_all_children, std::string("wait_for_all_children"));
   return exports;

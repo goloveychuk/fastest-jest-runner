@@ -15,7 +15,7 @@ const allDirs = focus
       .filter((f) => f.isDirectory())
       .map((f) => f.name);
 
-const WORKERS = 6;
+const WORKERS = 1;
 
 const filesCount = 500;
 const REPEATS = 2;
@@ -24,7 +24,7 @@ function generateTests(dir) {
   const template = fs.readFileSync(path.join(dir, 'template.js'), 'utf-8');
   const genDir = path.join(dir, 'gen');
   if (fs.existsSync(genDir)) {
-    fs.rmdirSync(genDir);
+    fs.rmdirSync(genDir, {recursive: true});
   }
   fs.mkdirSync(genDir);
   for (let i = 0; i < filesCount; i++) {
@@ -49,7 +49,8 @@ for (const d of allDirs) {
         [jestPath, '-w', WORKERS, '--no-cache', ...runnerArgs],
         {
           cwd: abs,
-          stdio: 'ignore',
+        //   stdio: 'ignore',
+        stdio: 'inherit'
         },
       );
 

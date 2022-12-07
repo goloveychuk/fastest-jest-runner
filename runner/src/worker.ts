@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import { createTestEnv, TestEnv } from './create-test-env';
 import {
   WorkerConfig,
@@ -7,15 +6,12 @@ import {
   WorkerInput,
   WorkerResponse,
 } from './types';
-import { createSyncFifoReader } from './protocol';
 import * as addon from './addon';
-import type { Fifo } from './fifo-maker';
 import RuntimeMod from 'jest-runtime';
 import HasteMap from 'jest-haste-map';
 import { buildSnapshot } from './snapshots/build';
 import { createTimings, Timing } from './log';
-import { connectToServer, sendRequest } from './socket';
-
+import { ProcessLike } from './wrapChild';
 
 // console.log(process.argv[2]);
 // fs.readFileSync(process.argv[2], 'utf8')
@@ -29,7 +25,12 @@ const runGc = async () => {
   await sleep(300); //waiting for gc??
 };
 
-function handleChild(__timing: Timing, testEnv: TestEnv, payload: WorkerInput.RunTest) {
+function handleChild(
+  childProcess: ProcessLike,
+  __timing: Timing,
+  testEnv: TestEnv,
+  payload: WorkerInput.RunTest,
+) {
   let handled = false;
 
   const handle = async (data: WorkerResponse.Response['testResult']) => {
@@ -40,16 +41,15 @@ function handleChild(__timing: Timing, testEnv: TestEnv, payload: WorkerInput.Ru
     handled = true;
     // __timing.time('handleTestRes', 'start');
     const resp: WorkerResponse.Response = {
-      id: payload.resultFifo.id,
+      testId: payload.testId,
       pid: process.pid,
       testResult: data,
     };
-    console.log('writing to', payload.resultFifo.path);
     // __timing.time('writeResult', 'start');
     // fs.writeFileSync(payload.resultFifo.path, JSON.stringify(resp));
-    await sendRequest(payload.resPath, resp)
+    // await sendRequest(payload.resPath, resp);
+    await childProcess.send(resp); //TODO
     // __timing.time('writeResult', 'end');
-    addon.sendThisProcOk();
     // __timing.time('handleTestRes', 'end');
   };
 
@@ -95,69 +95,138 @@ function handleChild(__timing: Timing, testEnv: TestEnv, payload: WorkerInput.Ru
     });
 }
 
-async function spinSnapshot(
-  workerConfig: WorkerConfig,
+// async function spinSnapshot(
+//   workerConfig: WorkerConfig,
+//   testEnv: TestEnv,
+//   payload: WorkerInput.SpinSnapshot,
+// ) {
+
+// }
+
+interface Loop<P> {
+  handle(payload: P): HandleRes;
+}
+let req = 0
+
+function createSnapshotLoop(
+  parent: ProcessLike,
   testEnv: TestEnv,
-  payload: WorkerInput.SpinSnapshot,
-) {
-  await buildSnapshot(workerConfig.snapshotConfig, testEnv, payload.name);
-  await runGc();
-  if (await loop(workerConfig, testEnv, payload.snapFifo) === 'main') {
-    console.log('snapshot loop stopped: ' + payload.name);
-    addon.sendThisProcOk();
-    addon.waitForAllChildren();
-    process.exit(0);
-  }
+): Loop<WorkerInput.RunTest> {
+  console.log('createSnapshotLoop');
+  return {
+    handle: async (payload) => {
+      // console.log('snap', payload);
+      const __timing = createTimings();
+
+      __timing.time('fork', 'start');
+      const childProcess = addon.fork();
+      // const res = 0 ;
+      if (childProcess.isChild) {
+        // reader.stop()
+        __timing.time('fork', 'end');
+        handleChild(childProcess, __timing, testEnv, payload);
+        return 'child';
+      } else {
+        childProcess.on('message', (msg) => {
+          parent.send(msg);
+        });
+      }
+    },
+  };
 }
 
-async function loop(
+function runLoop(
+  loop: Loop<unknown>,
+  pr: ProcessLike,
+): Promise<'main' | 'child'> {
+  return new Promise((resolve) => {
+    pr.on('message', async (msg) => {
+      try {
+        const res = await loop.handle(msg);
+        if (res === 'child') {
+          resolve('child');
+        } else {
+          return;
+        }
+      } catch (err) {
+        console.error('err in loop', err);
+      }
+    });
+  });
+}
+
+type HandleRes = Promise<void | 'child'>;
+
+function createWorkerLoop(
   workerConfig: WorkerConfig,
   testEnv: TestEnv,
-  fifo: Fifo,
-): Promise<'child' | 'main'> {
-  const reader = await connectToServer<WorkerInput.Input>(fifo.path);
+): Loop<WorkerInput.Input> {
+  const snapshots = new Map<string, Promise<addon.ForkedProcess>>();
 
-  for await (const payload of reader.gen()) {
-    switch (payload.type) {
-      case 'spinSnapshot': {
-        const childPid = addon.fork(payload.snapFifo.id);
-        const isChild = childPid === 0;
-        if (isChild) {
-          reader.stop()
-          spinSnapshot(workerConfig, testEnv, payload).catch((err) => {
-            console.error('err in spinSnapshot', err);
-            //todo handle properly
-          });
-          return 'child';
-        } else {
-          continue;
-        }
+  async function spinSnapshot(payload: WorkerInput.SpinSnapshot) {
+    const childProcess = addon.fork();
+    let resolve: any;
+    const promise = new Promise<addon.ForkedProcess>( _resolve => {
+      resolve = _resolve
+    })
+    snapshots.set(payload.name, promise)
+    if (childProcess.isChild) {
+      // reader.stop()
+      // console.log(process.channel)
+      process.disconnect()
+      // process.channel?.close?.()
+      await buildSnapshot(workerConfig.snapshotConfig, testEnv, payload.name);
+      await runGc();
+      const snapshotLoop = createSnapshotLoop(childProcess, testEnv);
+      if ((await runLoop(snapshotLoop, childProcess)) === 'main') {
+        //todo handle
+        console.log('snapshot loop stopped: ' + payload.name);
+        addon.waitForAllChildren();
+        process.exit(0);
       }
-      case 'test': {
-        const __timing = createTimings()
 
-        __timing.time('fork', 'start');
-        const childPid = addon.fork(payload.resultFifo.id);
-        // const res = 0 ;
-        const isChild = childPid === 0;
-
-        if (isChild) {
-          reader.stop()
-          __timing.time('fork', 'end');
-          handleChild(__timing, testEnv, payload);
-          return 'child';
-        } else {
-          continue;
-        }
-      }
-      default: {
-        // @ts-expect-error
-        throw new Error('bad payload type: ' + payload.type);
-      }
+      // spinSnapshot(workerConfig, testEnv, payload).catch((err) => {
+      //   console.error('err in spinSnapshot', err);
+      //   //todo handle properly
+      // });
+      return 'child';
+    } else {
+      resolve(childProcess);
+      childProcess.on('message', (msg) => {
+        console.log('got test resp', ++req, process.pid, msg)
+        process.send!(msg);
+      });
+      console.log('set snapshot', payload.name);
     }
   }
-  reader.stop()
-  return 'main'
+  return {
+    async handle(payload) {
+      switch (payload.type) {
+        case 'spinSnapshot': {
+          const res = await spinSnapshot(payload);
+          return res
+          break;
+        }
+        case 'test': {
+          // await sleep(10000);
+          const snap = await snapshots.get(payload.snapshotName);
+          if (!snap) {
+            throw new Error(
+              'no snapshot: ' + payload.snapshotName + snapshots.size,
+            );
+            // return
+          }
+          console.log('has snapshot~~~~~~~~~~~~~~!!!!!!!!!');
+          await snap.send(payload, console.log); //todo
+          break;
+        }
+        default: {
+          // @ts-expect-error
+          throw new Error('bad payload type: ' + payload.type);
+        }
+      }
+    },
+  };
 }
 
 function run(workerConfig: WorkerConfig) {
@@ -182,9 +251,9 @@ function run(workerConfig: WorkerConfig) {
       console.log('setRunTestFn');
 
       console.log('before loop');
-      addon.startProcControl(workerConfig.procControlFifo.path);
 
-      if (await loop(workerConfig, testEnv, workerConfig.workerFifo) === 'main') {
+      const workerLoop = createWorkerLoop(workerConfig, testEnv);
+      if ((await runLoop(workerLoop, process as any)) === 'main') {
         console.log('worker loop stopped');
         addon.waitForAllChildren();
         process.exit(0);
@@ -200,3 +269,5 @@ process.on('message', function handler(payload) {
   process.off('message', handler);
   run(payload);
 });
+
+// `Proc exited without response, status=${data.status}`,
