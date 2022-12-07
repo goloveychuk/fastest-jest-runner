@@ -237,7 +237,7 @@ class TestRunner extends EmittingTestRunner {
     tests: Array<Test>,
     watcher: TestWatcher,
     options: TestRunnerOptions,
-  ) {
+  ): Promise<void> {
     const workerPath = require.resolve('./worker');
 
     const rootDir = await fs.promises.mkdtemp(
@@ -247,7 +247,11 @@ class TestRunner extends EmittingTestRunner {
     const fifoMaker = new FifoMaker(rootDir);
 
     const workerFifo = fifoMaker.makeFifo2('worker');
+    let onGlobalError: (err: Error) => void;
 
+    const globalError = new Promise<void>((_, reject) => {
+      onGlobalError = reject;
+    });
     const testsLeft = new Set<string>();
     const onProcExit: OnProcExit = (data) => {
       // const fifo = fifoMaker.getFifoById(data.id);
@@ -318,14 +322,21 @@ class TestRunner extends EmittingTestRunner {
       },
     );
     child.on('exit', (res) => {
-      console.log('exit from root process!!!!!', res); //todo handle this, finish testrun
+      // for (const [testId, onTest] of testsPromises) {
+      //   onTest({
+      //     id: testId,
+      //     pid: -1,
+      //     testResult: makeErrorResp('Root process exited before test finished'),
+      //   });
+      // }
+      // process.exit(1);
       // if (testsLeft) {
       if (res === 0) {
         if (testsLeft.size) {
           console.error('Tests left:', Array.from(testsLeft).join('\n'));
         }
       } else {
-        process.exit(1);
+        onGlobalError(new Error('Root process exited with error'));
       }
     });
 
@@ -490,11 +501,13 @@ class TestRunner extends EmittingTestRunner {
       }
       // child.kill('SIGTERM');
     };
+    const testsSuccess = Promise.all(tests.map((test) => runTestLimited(test))).then(cleanup, cleanup);
 
-    return Promise.all(tests.map((test) => runTestLimited(test))).then(
-      cleanup,
-      cleanup,
-    );
+    const errorPromise = globalError.catch((err) => {
+      process.kill(process.pid) //because it don't exi
+      throw err
+    })
+    return Promise.race([testsSuccess, errorPromise])
   }
 
   on<Name extends keyof TestEvents>(
