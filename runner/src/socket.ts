@@ -1,4 +1,6 @@
 import * as net from 'net';
+import { debugLog } from './log';
+import { splitByNewline } from './utils';
 
 type Payload<T> =
   | {
@@ -14,7 +16,6 @@ type Payload<T> =
       kind: 'stop';
     };
 
-const DELIMITER = '\n';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -44,7 +45,6 @@ export async function createMultiConServer<T>(
 export async function sendRequest<T>(socketPath: string, d: T) {
   return new Promise<void>((resolve) => {
     const client = net.createConnection(socketPath, () => {
-    //   console.log('connected');
       const str = JSON.stringify(d);
       client.end(str, 'utf8', resolve);
     });
@@ -70,7 +70,7 @@ export async function createServer<T>(socketPath: string) {
 
   const _write = async (payload: Payload<unknown>, end?: boolean) => {
     const socket = await connected; //todo await prev req?
-    const serialized = JSON.stringify(payload) + DELIMITER;
+    const serialized = JSON.stringify(payload) + '\n';
 
     await new Promise<void>((resolve, reject) =>
       socket.write(serialized, (err) => {
@@ -118,26 +118,13 @@ export async function createServer<T>(socketPath: string) {
   return { write, stop };
 }
 
-async function* splitByNewline(gen: {
-  [Symbol.asyncIterator](): AsyncGenerator<any, any, void>;
-}) {
-  let soFar: string | undefined = undefined;
 
-  for await (const data of gen) {
-    const parts: string[] = ((soFar ?? '') + data).split(DELIMITER);
-    soFar = parts.pop();
-
-    for (const part of parts) {
-      yield part;
-    }
-  }
-}
 
 export async function connectToServer<T>(socketPath: string) {
   let counter = 0;
 
   const client = net.createConnection(socketPath, () => {
-    console.log('connected');
+    debugLog('connected');
   });
 
   async function* gen() {
@@ -145,7 +132,7 @@ export async function connectToServer<T>(socketPath: string) {
       const msg = JSON.parse(d) as Payload<T>;
 
       if (msg.kind === 'ping') {
-        console.log('ping');
+        debugLog('ping');
         continue;
       } else if (msg.kind === 'stop') {
         return;

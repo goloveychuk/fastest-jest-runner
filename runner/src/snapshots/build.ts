@@ -1,4 +1,5 @@
 import type { TestEnv } from '../create-test-env';
+import { debugLog } from '../log';
 import type { SnapshotBuilderModule, SnapshotConfig } from './types';
 
 export async function buildSnapshot(
@@ -12,7 +13,7 @@ export async function buildSnapshot(
         snapshotConfig.snapshotBuilderPath,
         _mod,
       );
-      console.log('requiring', resolved);
+      debugLog('requiring', resolved);
       const esm = runtime.unstable_shouldLoadAsEsm(resolved);
   
       if (esm) {

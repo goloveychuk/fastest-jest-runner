@@ -1,4 +1,5 @@
 import { TestResult } from "@jest/test-result";
+import debug from "debug";
 
 export const phaseOrder = [
   'runTest',
@@ -17,6 +18,11 @@ type Phases = typeof phaseOrder[number];
 // const SUFFIX = '¬end¬\n'
 
 // export const getAllTimings = () => _allTimings
+
+
+
+export const debugLog = debug("fastest-jest-runner");
+
 
 // export function handleStderr(chunk: string) {
 //     const start = chunk.indexOf(PREFIX);

@@ -33,8 +33,9 @@ import type { SnapshotBuilderModule, SnapshotConfig } from './snapshots/types';
 import { replaceRootDirInPath } from 'jest-config';
 import { createScriptTransformer } from '@jest/transform';
 import { Config } from '@jest/types';
-import { createTimings } from './log';
+import { createTimings, debugLog } from './log';
 import { createMultiConServer, createServer } from './socket';
+import { splitByNewline } from './utils';
 
 function setCleanupBeforeExit(clean: () => void) {
   let called = false;
@@ -46,8 +47,7 @@ function setCleanupBeforeExit(clean: () => void) {
       called = true;
       clean();
     }
-    // if (options.cleanup) console.log('clean');
-    // if (exitCode || exitCode === 0) console.log(exitCode);
+
     if (options.exit) {
       process.exit(exitCode);
     }
@@ -78,6 +78,26 @@ function withCache<TArg extends string | number, TRes>(
     }
     return cache.get(arg)!;
   };
+}
+
+async function* filterErrors(gen: AsyncGenerator<string>) {
+  let isError = false;
+  for await (const item of gen) {
+    if (item.includes('uv_thread_join(threads_[i].get()))')) {
+      isError = true;
+      continue;
+    } else {
+      // console.log(')))', {isError}, item.search(/^ *\d+: /), JSON.stringify(item))
+      if (isError) {
+        if (item.search(/^ *\d+: /) !== -1) {
+          continue;
+        } else {
+          isError = false;
+        }
+      }
+    }
+    yield item;
+  }
 }
 
 class TestRunner extends EmittingTestRunner {
@@ -217,7 +237,7 @@ class TestRunner extends EmittingTestRunner {
     tests: Array<Test>,
     watcher: TestWatcher,
     options: TestRunnerOptions,
-  ) {
+  ): Promise<void> {
     const workerPath = require.resolve('./worker');
 
     const rootDir = await fs.promises.mkdtemp(
@@ -227,7 +247,11 @@ class TestRunner extends EmittingTestRunner {
     const fifoMaker = new FifoMaker(rootDir);
 
     const workerFifo = fifoMaker.makeFifo2('worker');
+    let onGlobalError: (err: Error) => void;
 
+    const globalError = new Promise<void>((_, reject) => {
+      onGlobalError = reject;
+    });
     const testsLeft = new Set<string>();
     const onProcExit: OnProcExit = (data) => {
       // const fifo = fifoMaker.getFifoById(data.id);
@@ -238,7 +262,7 @@ class TestRunner extends EmittingTestRunner {
           `Proc exited without response, status=${data.status}`,
         ),
       };
-      testsPromises.get(resp.id)!(resp)
+      testsPromises.get(resp.id)!(resp);
       // fs.writeFileSync(fifo.path, JSON.stringify(resp));
     };
 
@@ -298,31 +322,49 @@ class TestRunner extends EmittingTestRunner {
       },
     );
     child.on('exit', (res) => {
-      console.log('exit from root process!!!!!', res); //todo handle this, finish testrun
-      // if (testsLeft) {
-      console.log('Tests left:', Array.from(testsLeft).join('\n'));
+      // for (const [testId, onTest] of testsPromises) {
+      //   onTest({
+      //     id: testId,
+      //     pid: -1,
+      //     testResult: makeErrorResp('Root process exited before test finished'),
+      //   });
       // }
+      // process.exit(1);
+      // if (testsLeft) {
+      if (res === 0) {
+        if (testsLeft.size) {
+          console.error('Tests left:', Array.from(testsLeft).join('\n'));
+        }
+      } else {
+        onGlobalError(new Error('Root process exited with error'));
+      }
     });
 
     child.stdout!.on('data', (data) => {
       console.log(data.toString('utf-8'));
     });
-    child.stderr!.on('data', (data) => {
-      const chunk = data.toString('utf-8');
-      console.log(chunk);
-    });
+
+    const stderrPromise = (async () => {
+      for await (const line of filterErrors(
+        splitByNewline(child.stderr! as any),
+      )) {
+        console.log(line);
+      }
+    })();
 
     child.send(workerConfig);
     const respsFifo = fifoMaker.makeFifo2('resp');
 
-    let testsPromises = new Map<number, (d: WorkerResponse.Response) => void>()
-    const respServer = await createMultiConServer<WorkerResponse.Response>(respsFifo.path, (res=> {
-      testsPromises.get(res.id)!(res);
-    }));
+    let testsPromises = new Map<number, (d: WorkerResponse.Response) => void>();
+    const respServer = await createMultiConServer<WorkerResponse.Response>(
+      respsFifo.path,
+      (res) => {
+        testsPromises.get(res.id)!(res);
+      },
+    );
 
     const concurrency = options.serial ? 1 : this._globalConfig.maxWorkers;
     // let concurrency = 25;
-    console.log({ concurrency });
 
     const workerWriter = await createServer<WorkerInput.Input>(workerFifo.path);
 
@@ -334,7 +376,7 @@ class TestRunner extends EmittingTestRunner {
 
       const writer = await createServer<WorkerInput.Input>(snapFifo.path);
       // const writer = await createAsyncFifoWriter<WorkerInput.Input>(snapFifo);
-      console.log(`spinning!!!!!!!!!!!!!!!!! ${name}`);
+      debugLog(`spinning!!!!!!!!!!!!!!!!! ${name}`);
 
       await workerWriter.write({
         type: 'spinSnapshot',
@@ -342,7 +384,7 @@ class TestRunner extends EmittingTestRunner {
         snapFifo,
       });
       cleanups.push(async () => {
-        await writer.stop()
+        await writer.stop();
       });
       // setInterval(() => {
       //   writer.write({ type: 'ping' });
@@ -353,7 +395,6 @@ class TestRunner extends EmittingTestRunner {
     const initOrGetSnapshot = withCache(initSnapshot);
 
     const runTest = async (test: Test): Promise<TestResult> => {
-      
       const __timing = createTimings();
 
       __timing.time('runTest', 'start');
@@ -362,14 +403,14 @@ class TestRunner extends EmittingTestRunner {
       const snapshotName = await getSnapshotName(test);
 
       const snapshotObj = await initOrGetSnapshot(snapshotName);
-      
+
       const resultFifo = fifoMaker.makeFifo2('result');
       const resPromise = new Promise<WorkerResponse.Response>((resolve) => {
         testsPromises.set(resultFifo.id, resolve);
-      })
+      });
       testsById.set(resultFifo.id, test);
 
-      console.log(`sent msg ${test.path}`);
+      debugLog(`sent msg ${test.path}`);
 
       __timing.time('writeToFifo', 'start');
       await snapshotObj.writer.write({
@@ -383,7 +424,7 @@ class TestRunner extends EmittingTestRunner {
       // child.send([id, test.path]);
 
       __timing.time('readTestResult', 'start');
-      const resp = await resPromise
+      const resp = await resPromise;
       __timing.time('readTestResult', 'end');
       // await fs.promises.unlink(resultFifo.path);
       testsLeft.delete(test.path);
@@ -402,9 +443,7 @@ class TestRunner extends EmittingTestRunner {
       // }
       // });
     };
-    // setInterval(() => {
-    //   console.log('tick');
-    // }, 1000);
+
     const mutex = pLimit(concurrency);
     const runTestLimited = (test: Test) =>
       mutex(async () => {
@@ -428,10 +467,10 @@ class TestRunner extends EmittingTestRunner {
 
     const cleanup = async () => {
       await Promise.all(cleanups.map((cl) => cl()));
-      await workerWriter.stop()
-      await respServer.stop()
+      await workerWriter.stop();
+      await respServer.stop();
       await fs.promises.rm(rootDir, { recursive: true });
-      console.log('before proc loop');
+      debugLog('before proc loop');
       const timer = setTimeout(() => {
         //better wait for worker exit
         const processes = procControl.getLeftProcesses(); //case for ayout/switchLayoutUtil.unit.ts // deadlock, workers
@@ -456,18 +495,19 @@ class TestRunner extends EmittingTestRunner {
       }, 3000);
       await procLoop;
       clearTimeout(timer);
-      console.log('after proc loop await');
-      // if (testsLeft.size) {
-      console.log('Tests left:', Array.from(testsLeft).join('\n'));
 
-      // }
+      if (testsLeft.size) {
+        console.error('Tests left:', Array.from(testsLeft).join('\n'));
+      }
       // child.kill('SIGTERM');
     };
+    const testsSuccess = Promise.all(tests.map((test) => runTestLimited(test))).then(cleanup, cleanup);
 
-    return Promise.all(tests.map((test) => runTestLimited(test))).then(
-      cleanup,
-      cleanup,
-    );
+    const errorPromise = globalError.catch((err) => {
+      process.kill(process.pid) //because it don't exi
+      throw err
+    })
+    return Promise.race([testsSuccess, errorPromise])
   }
 
   on<Name extends keyof TestEvents>(
