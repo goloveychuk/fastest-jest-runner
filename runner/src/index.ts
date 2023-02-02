@@ -481,7 +481,7 @@ class TestRunner extends EmittingTestRunner {
           if (!testsById.has(data.id)) {
             continue; //not a test process
           }
-          const fileName = testsById.has(data.id);
+          const fileName = testsById.get(data.id)?.path;
 
           if (data.receivedOk) {
             console.error('Stale process', pid, fileName);
