@@ -2,6 +2,11 @@
 
 [![npm version](https://badge.fury.io/js/fastest-jest-runner.svg)](https://www.npmjs.com/package/fastest-jest-runner)
 
+### WARNING
+It's experimental, not prod ready, have many bugs, basically POC. Although we use it in a big project for a year with only small problems.
+
+For proper implementation, process.fork should be implemented inside nodejs.
+
 ### Motivation
 From what I discovered, there are two major reasons of jest slowness, compared to jasmine e.g. 
 1) for every test file jest is creating new env, importing all the modules, creating jsdom env etc
